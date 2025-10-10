@@ -2,17 +2,18 @@ import { getFirebaseApp } from './client';
 export type { User, UserCredential } from 'firebase/auth';
 
 let authInstance: import('firebase/auth').Auth | null = null;
-let authModulePromise: Promise<typeof import('firebase/auth')> | null = null;
 
 function isReactNative() {
   return typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
 }
 
-async function loadAuthModule() {
-  if (!authModulePromise) {
-    authModulePromise = import('firebase/auth');
+async function loadReactNativeAuthModule() {
+  const rnSpecifier = 'firebase/auth/' + 'react-native';
+  try {
+    return await import(rnSpecifier);
+  } catch (error) {
+    return await import('firebase/auth');
   }
-  return authModulePromise;
 }
 
 async function getFirebaseAuthInstance(): Promise<import('firebase/auth').Auth> {
@@ -23,14 +24,14 @@ async function getFirebaseAuthInstance(): Promise<import('firebase/auth').Auth> 
 
   if (isReactNative()) {
     const [{ initializeAuth, getReactNativePersistence }, { default: AsyncStorage }] = await Promise.all([
-      import('firebase/auth/react-native'),
+      loadReactNativeAuthModule(),
       import('@react-native-async-storage/async-storage')
     ]);
     authInstance = initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage)
     });
   } else {
-    const { getAuth } = await loadAuthModule();
+    const { getAuth } = await import('firebase/auth');
     authInstance = getAuth(app);
   }
 
@@ -39,25 +40,25 @@ async function getFirebaseAuthInstance(): Promise<import('firebase/auth').Auth> 
 
 export async function subscribeToAuthChanges(handler: (user: import('firebase/auth').User | null) => void) {
   const auth = await getFirebaseAuthInstance();
-  const { onAuthStateChanged } = await loadAuthModule();
+  const { onAuthStateChanged } = await import('firebase/auth');
   return onAuthStateChanged(auth, handler);
 }
 
 export async function signInWithEmail(email: string, password: string) {
   const auth = await getFirebaseAuthInstance();
-  const { signInWithEmailAndPassword } = await loadAuthModule();
+  const { signInWithEmailAndPassword } = await import('firebase/auth');
   return signInWithEmailAndPassword(auth, email, password);
 }
 
 export async function signUpWithEmail(email: string, password: string) {
   const auth = await getFirebaseAuthInstance();
-  const { createUserWithEmailAndPassword } = await loadAuthModule();
+  const { createUserWithEmailAndPassword } = await import('firebase/auth');
   return createUserWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOutFirebase() {
   const auth = await getFirebaseAuthInstance();
-  const { signOut } = await loadAuthModule();
+  const { signOut } = await import('firebase/auth');
   return signOut(auth);
 }
 

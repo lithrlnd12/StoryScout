@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
   Text,
-  FlatList,
-  ImageBackground,
   StyleSheet,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
-  Linking,
-  Platform
+  Dimensions,
+  FlatList,
+  ImageBackground,
+  ScrollView,
+  Linking
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -43,7 +43,19 @@ const fallbackFeed: TrailerDoc[] = trailers.map(item => ({
   vimeoCategories: item.vimeoCategories
 }));
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const ITEM_HEIGHT = SCREEN_HEIGHT;
+
+const viewabilityConfig = {
+  itemVisiblePercentThreshold: 80
+};
+
 type AuthMode = 'signin' | 'signup';
+
+type ViewableCallback = {
+  viewableItems: Array<{ item: TrailerDoc }>;
+  changed: Array<{ item: TrailerDoc }>;
+};
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -54,6 +66,9 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const listRef = useRef<FlatList<TrailerDoc>>(null);
 
   useEffect(() => {
     const prepare = async () => {
@@ -89,6 +104,45 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
+  const genres = useMemo(() => {
+    const set = new Set<string>();
+    feed.forEach(trailer => {
+      if (trailer.genre) {
+        set.add(trailer.genre);
+      }
+      trailer.vimeoCategories?.forEach(category => set.add(category));
+    });
+    return ['All', ...Array.from(set)];
+  }, [feed]);
+
+  const filteredFeed = useMemo(() => {
+    if (selectedGenre === 'All') {
+      return feed;
+    }
+    const target = selectedGenre.toLowerCase();
+    return feed.filter(trailer => {
+      if (trailer.genre?.toLowerCase() === target) return true;
+      return trailer.vimeoCategories?.some(category => category.toLowerCase() === target);
+    });
+  }, [feed, selectedGenre]);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+    if (listRef.current) {
+      listRef.current.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [selectedGenre]);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: ViewableCallback) => {
+    if (viewableItems.length > 0) {
+      const activeId = viewableItems[0].item.id;
+      const index = filteredFeed.findIndex(item => item.id === activeId);
+      if (index >= 0) {
+        setCurrentIndex(index);
+      }
+    }
+  }, [filteredFeed]);
+
   const handleAuthSubmit = async () => {
     if (!email || !password) {
       setAuthError('Please enter email and password.');
@@ -117,14 +171,13 @@ export default function App() {
 
   const handleWatchFull = (url: string) => {
     if (!url) {
-      Alert.alert('Unavailable', 'Full content is not yet available.');
       return;
     }
-    Linking.openURL(url).catch(() => Alert.alert('Error', 'Unable to open video.'));
+    Linking.openURL(url).catch(() => undefined);
   };
 
   const handleSave = () => {
-    Alert.alert('Coming Soon', 'Watchlist functionality will arrive in the next build.');
+    // Placeholder for future watchlist functionality
   };
 
   if (!ready) {
@@ -176,25 +229,23 @@ export default function App() {
   }
 
   const renderItem = ({ item }: { item: TrailerDoc }) => (
-    <ImageBackground
-      source={{ uri: item.thumbnailUrl }}
-      style={styles.trailerCard}
-      resizeMode="cover"
-    >
-      <View style={styles.overlay}>
-        <Text style={styles.genre}>{item.genre}</Text>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.synopsis}>{item.synopsis}</Text>
-        <View style={styles.ctaRow}>
-          <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item.fullContentUrl)}>
-            <Text style={styles.primaryCtaText}>Watch Full</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
-            <Text style={styles.secondaryCtaText}>Save</Text>
-          </TouchableOpacity>
+    <View style={styles.cardContainer}>
+      <ImageBackground source={{ uri: item.thumbnailUrl }} style={styles.thumbnail}>
+        <View style={styles.videoOverlay}>
+          <Text style={styles.genre}>{item.genre}</Text>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.synopsis}>{item.synopsis}</Text>
+          <View style={styles.ctaRow}>
+            <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item.fullContentUrl || item.trailerUrl)}>
+              <Text style={styles.primaryCtaText}>Watch Full</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
+              <Text style={styles.secondaryCtaText}>Save</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </ImageBackground>
+      </ImageBackground>
+    </View>
   );
 
   return (
@@ -206,12 +257,35 @@ export default function App() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.genreRow}
+      >
+        {genres.map(genre => (
+          <TouchableOpacity
+            key={genre}
+            style={genre === selectedGenre ? styles.genrePillActive : styles.genrePill}
+            onPress={() => setSelectedGenre(genre)}
+          >
+            <Text style={genre === selectedGenre ? styles.genrePillTextActive : styles.genrePillText}>{genre}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       <FlatList
-        data={feed}
-        keyExtractor={item => item.id}
+        ref={listRef}
+        data={filteredFeed}
         renderItem={renderItem}
+        keyExtractor={item => item.id}
         pagingEnabled
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
         showsVerticalScrollIndicator={false}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
       />
     </SafeAreaView>
   );
@@ -248,7 +322,7 @@ const styles = StyleSheet.create({
     color: tokens.textPrimary,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    paddingVertical: 12,
     marginBottom: 12
   },
   errorText: {
@@ -257,7 +331,8 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
@@ -271,13 +346,43 @@ const styles = StyleSheet.create({
     color: tokens.accentCyan,
     fontWeight: '600'
   },
-  trailerCard: {
-    height: '100%',
+  genreRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    columnGap: 12
+  },
+  genrePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: tokens.borderDefault,
+    paddingVertical: 6,
+    paddingHorizontal: 16
+  },
+  genrePillActive: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    backgroundColor: tokens.accentMagenta
+  },
+  genrePillText: {
+    color: tokens.textSecondary,
+    fontWeight: '500'
+  },
+  genrePillTextActive: {
+    color: tokens.textPrimary,
+    fontWeight: '600'
+  },
+  cardContainer: {
+    height: ITEM_HEIGHT,
     justifyContent: 'flex-end'
   },
-  overlay: {
-    backgroundColor: 'rgba(15, 18, 26, 0.65)',
-    padding: 24
+  thumbnail: {
+    height: ITEM_HEIGHT,
+    justifyContent: 'flex-end'
+  },
+  videoOverlay: {
+    padding: 24,
+    backgroundColor: 'rgba(15,18,26,0.45)'
   },
   genre: {
     color: tokens.accentCyan,
@@ -302,10 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.accentMagenta,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center'
+    borderRadius: 24
   },
   primaryCtaText: {
     color: tokens.textPrimary,
@@ -316,20 +418,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center'
+    borderRadius: 24
   },
   secondaryCtaText: {
     color: tokens.textPrimary,
     fontWeight: '600'
-  },
-  authToggle: {
-    marginTop: 16,
-    alignItems: 'center'
-  },
-  authToggleText: {
-    color: tokens.textSecondary
   }
 });

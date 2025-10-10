@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFirebaseAnalytics } from '@shared/firebase/client';
 import { subscribeToPublicContent, type TrailerDoc } from '@shared/firebase/firestore';
 import {
@@ -36,6 +37,10 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [transitioning, setTransitioning] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     getFirebaseAnalytics().catch(() => undefined);
@@ -64,6 +69,75 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
+  const genres = useMemo(() => {
+    const set = new Set<string>();
+    trailers.forEach(trailer => {
+      if (trailer.genre) {
+        set.add(trailer.genre);
+      }
+      trailer.vimeoCategories?.forEach(category => set.add(category));
+    });
+    return ['All', ...Array.from(set)];
+  }, [trailers]);
+
+  const filteredTrailers = useMemo(() => {
+    if (selectedGenre === 'All') {
+      return trailers;
+    }
+    const target = selectedGenre.toLowerCase();
+    return trailers.filter(trailer => {
+      if (trailer.genre?.toLowerCase() === target) return true;
+      return trailer.vimeoCategories?.some(category => category.toLowerCase() === target);
+    });
+  }, [trailers, selectedGenre]);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [selectedGenre, filteredTrailers.length]);
+
+  const goToIndex = useCallback(
+    (nextIndex: number) => {
+      const clamped = Math.max(0, Math.min(filteredTrailers.length - 1, nextIndex));
+      if (clamped === currentIndex) return;
+      setTransitioning(true);
+      setCurrentIndex(clamped);
+      setTimeout(() => setTransitioning(false), 400);
+    },
+    [currentIndex, filteredTrailers.length]
+  );
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (transitioning) return;
+      if (event.deltaY > 40) {
+        event.preventDefault();
+        goToIndex(currentIndex + 1);
+      } else if (event.deltaY < -40) {
+        event.preventDefault();
+        goToIndex(currentIndex - 1);
+      }
+    };
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (transitioning) return;
+      if (event.key === 'ArrowDown' || event.key === 's') {
+        goToIndex(currentIndex + 1);
+      } else if (event.key === 'ArrowUp' || event.key === 'w') {
+        goToIndex(currentIndex - 1);
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [currentIndex, transitioning, filteredTrailers.length, goToIndex]);
+
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!email || !password) {
@@ -91,58 +165,69 @@ export default function App() {
     await signOutFirebase().catch(() => undefined);
   };
 
-  const renderCard = (trailer: TrailerDoc) => {
-    const iframeSrc = trailer.trailerUrl || (trailer.vimeoId ? 'https://player.vimeo.com/video/' + trailer.vimeoId + '?autoplay=0&title=0&byline=0&portrait=0' : '');
-    const backgroundStyle: React.CSSProperties = {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      backgroundImage: 'url(' + trailer.thumbnailUrl + ')',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center'
-    };
+  const renderCard = (trailer: TrailerDoc, index: number) => {
+    const isActive = index === currentIndex;
+    const autoplay = isActive ? '1' : '0';
+    const iframeSrc = trailer.trailerUrl || (
+      trailer.vimeoId
+        ? 'https://player.vimeo.com/video/' + trailer.vimeoId + '?autoplay=' + autoplay + '&muted=0&title=0&byline=0&portrait=0'
+        : ''
+    );
+    const transform = 'translateY(' + (index - currentIndex) * 100 + 'vh)';
 
     return (
-      <article
+      <section
         key={trailer.id}
         style={{
-          backgroundColor: tokens.backgroundSecondary,
-          borderRadius: 16,
-          overflow: 'hidden',
-          border: '1px solid ' + tokens.borderDefault
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'transform 0.35s ease-out',
+          transform
         }}
       >
-        <div style={{ position: 'relative', paddingBottom: '56.25%', backgroundColor: '#000' }}>
-          {iframeSrc ? (
-            <iframe
-              src={iframeSrc}
-              allow="autoplay; fullscreen"
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-              title={trailer.title}
-            />
-          ) : (
-            <div style={backgroundStyle} />
-          )}
-        </div>
-        <div style={{ padding: 20 }}>
-          <span style={{ display: 'inline-block', fontSize: 12, fontWeight: 600, color: gradients[1] }}>{trailer.genre}</span>
-          <h2 style={{ margin: '12px 0 8px' }}>{trailer.title}</h2>
-          <p style={{ color: tokens.textSecondary }}>{trailer.synopsis}</p>
-          <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
-            <button
-              style={primaryButtonStyle}
-              onClick={() => window.open(trailer.fullContentUrl || iframeSrc, '_blank')}
-            >
-              Watch Full
-            </button>
-            <button style={secondaryButtonStyle} onClick={() => alert('Watchlist coming soon!')}>
-              Save
-            </button>
+        <div style={cardStyle}>
+          <div style={videoShellStyle}>
+            {iframeSrc ? (
+              <iframe
+                src={iframeSrc}
+                allow="autoplay; fullscreen"
+                style={iframeStyle}
+                title={trailer.title}
+              />
+            ) : (
+              <div
+                style={{
+                  ...iframeStyle,
+                  backgroundImage: 'url(' + trailer.thumbnailUrl + ')',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              />
+            )}
+            <div style={overlayStyle}>
+              <div style={metadataStyle}>
+                <span style={genrePillStyle}>{trailer.genre}</span>
+                <h2 style={{ margin: '16px 0 8px' }}>{trailer.title}</h2>
+                <p style={{ color: tokens.textSecondary, maxWidth: 480 }}>{trailer.synopsis}</p>
+                <div style={actionsRowStyle}>
+                  <button style={primaryButtonStyle} onClick={() => window.open(trailer.fullContentUrl || iframeSrc, '_blank')}>
+                    Watch Full
+                  </button>
+                  <button style={secondaryButtonStyle} onClick={() => alert('Watchlist coming soon!')}>
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </article>
+      </section>
     );
   };
 
@@ -193,7 +278,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: tokens.backgroundPrimary, color: tokens.textPrimary, minHeight: '100vh' }}>
+    <div style={appRootStyle}>
       <header style={headerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <img src="/storyscout-logo.png" alt="Story Scout" style={{ width: 48 }} />
@@ -204,12 +289,39 @@ export default function App() {
         </div>
         <button style={secondaryButtonStyle} onClick={handleSignOut}>Sign Out</button>
       </header>
-      <main style={gridStyle}>
-        {trailers.map(renderCard)}
-      </main>
+
+      <div style={genreBarStyle}>
+        {genres.map(genre => (
+          <button
+            key={genre}
+            style={genre === selectedGenre ? genreButtonActiveStyle : genreButtonStyle}
+            onClick={() => setSelectedGenre(genre)}
+          >
+            {genre}
+          </button>
+        ))}
+      </div>
+
+      <div ref={containerRef} style={feedViewportStyle}>
+        {filteredTrailers.map(renderCard)}
+        {filteredTrailers.length === 0 && (
+          <div style={emptyStateStyle}>
+            <h2>No trailers available yet</h2>
+            <p style={{ color: tokens.textSecondary }}>We’re busy scouting more stories for this genre.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
+const appRootStyle: React.CSSProperties = {
+  background: tokens.backgroundPrimary,
+  minHeight: '100vh',
+  color: tokens.textPrimary,
+  overflow: 'hidden',
+  position: 'relative'
+};
 
 const headerStyle: React.CSSProperties = {
   display: 'flex',
@@ -218,33 +330,109 @@ const headerStyle: React.CSSProperties = {
   padding: '20px 32px'
 };
 
-const gridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-  gap: 24,
-  padding: '0 32px 48px'
+const genreBarStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 12,
+  padding: '0 32px 16px',
+  overflowX: 'auto'
+};
+
+const genreButtonStyle: React.CSSProperties = {
+  borderRadius: 999,
+  border: '1px solid ' + tokens.borderDefault,
+  padding: '8px 16px',
+  background: 'transparent',
+  color: tokens.textSecondary,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
+};
+
+const genreButtonActiveStyle: React.CSSProperties = {
+  ...genreButtonStyle,
+  backgroundImage: 'linear-gradient(135deg, ' + tokens.accentMagenta + ', ' + tokens.accentCyan + ')',
+  border: 'none',
+  color: tokens.textPrimary
+};
+
+const feedViewportStyle: React.CSSProperties = {
+  position: 'relative',
+  height: 'calc(100vh - 160px)',
+  overflow: 'hidden'
+};
+
+const cardStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 480,
+  height: '100%',
+  position: 'relative',
+  borderRadius: 24,
+  overflow: 'hidden',
+  boxShadow: '0 24px 60px rgba(0,0,0,0.35)'
+};
+
+const videoShellStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  height: '100%'
+};
+
+const iframeStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  border: 'none',
+  borderRadius: 24
+};
+
+const overlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  padding: 24,
+  background: 'linear-gradient(0deg, rgba(15,18,26,0.85) 0%, rgba(15,18,26,0.0) 65%)'
+};
+
+const metadataStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12
+};
+
+const actionsRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 12
 };
 
 const primaryButtonStyle: React.CSSProperties = {
-  flex: '1 1 0%',
-  padding: '12px 16px',
+  padding: '12px 24px',
   borderRadius: 999,
   border: 'none',
+  backgroundImage: 'linear-gradient(135deg, ' + tokens.accentMagenta + ', ' + tokens.accentCyan + ')',
   color: tokens.textPrimary,
   fontWeight: 600,
-  backgroundImage: 'linear-gradient(135deg, ' + tokens.accentMagenta + ', ' + tokens.accentCyan + ')',
   cursor: 'pointer'
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
-  flex: '1 1 0%',
-  padding: '12px 16px',
+  padding: '12px 24px',
   borderRadius: 999,
   border: '1px solid ' + tokens.textPrimary,
   background: 'transparent',
   color: tokens.textPrimary,
   fontWeight: 600,
   cursor: 'pointer'
+};
+
+const genrePillStyle: React.CSSProperties = {
+  display: 'inline-block',
+  backgroundColor: 'rgba(0,0,0,0.4)',
+  padding: '6px 12px',
+  borderRadius: 999,
+  fontSize: 12,
+  letterSpacing: 1
 };
 
 const authContainerStyle: React.CSSProperties = {
@@ -281,4 +469,12 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid ' + tokens.borderDefault,
   borderRadius: 999,
   padding: '12px 16px'
+};
+
+const emptyStateStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: '40%',
+  left: '50%',
+  transform: 'translate(-50%, -40%)',
+  textAlign: 'center'
 };
