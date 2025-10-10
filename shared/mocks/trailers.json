@@ -4,35 +4,44 @@
     "title": "AI Frontiers",
     "genre": "Action",
     "durationSeconds": 75,
-    "trailerUrl": "https://cdn.example.com/trailers/ai-frontiers-vertical.mp4",
-    "fullContentUrl": "https://cdn.example.com/full/ai-frontiers.mp4",
     "creator": "Quantum Studios",
     "synopsis": "A robotics researcher races to stop her invention from being weaponized.",
-    "thumbnailUrl": "https://cdn.example.com/thumbnails/ai-frontiers.jpg",
-    "likes": 12000
+    "thumbnailUrl": "https://i.vimeocdn.com/video/452001751-9f9771d5f052c718a1dc44cc979f409d1e4c3438be297b7b69046180acd6a402-d_640x360.jpg",
+    "likes": 12000,
+    "vimeoId": "76979871",
+    "vimeoCategories": [
+      "technology",
+      "documentary"
+    ]
   },
   {
     "id": "trailer_002",
     "title": "The Mentor",
     "genre": "Drama",
     "durationSeconds": 68,
-    "trailerUrl": "https://cdn.example.com/trailers/the-mentor-vertical.mp4",
-    "fullContentUrl": "https://cdn.example.com/full/the-mentor.mp4",
     "creator": "Elevate Films",
     "synopsis": "An educator helps a prodigy navigate the future of immersive learning.",
-    "thumbnailUrl": "https://cdn.example.com/thumbnails/the-mentor.jpg",
-    "likes": 8600
+    "thumbnailUrl": "https://i.vimeocdn.com/video/591838660-158b6cedcd9f2c2d80a3c6329a2b805d6e7ca3a0655e768f8b51006979cd13a2-d_640x360.jpg",
+    "likes": 8600,
+    "vimeoId": "148751763",
+    "vimeoCategories": [
+      "education",
+      "documentary"
+    ]
   },
   {
     "id": "trailer_003",
     "title": "Carbon Rewrite",
     "genre": "Sci-Fi",
     "durationSeconds": 82,
-    "trailerUrl": "https://cdn.example.com/trailers/carbon-rewrite-vertical.mp4",
-    "fullContentUrl": "https://cdn.example.com/full/carbon-rewrite.mp4",
     "creator": "Nebula Network",
     "synopsis": "A journalist uncovers a climate conspiracy that spans multiple realities.",
-    "thumbnailUrl": "https://cdn.example.com/thumbnails/carbon-rewrite.jpg",
-    "likes": 9400
+    "thumbnailUrl": "https://i.vimeocdn.com/video/452001751-9f9771d5f052c718a1dc44cc979f409d1e4c3438be297b7b69046180acd6a402-d_640x360.jpg",
+    "likes": 9400,
+    "vimeoId": "22439234",
+    "vimeoCategories": [
+      "scifi",
+      "shortfilms"
+    ]
   }
 ]

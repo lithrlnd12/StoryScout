@@ -8,6 +8,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { getFirebaseApp } from './client';
+import { buildVimeoEmbedUrl, mapVimeoCategoriesToGenre } from '../services/vimeo';
 
 export type TrailerDoc = {
   id: string;
@@ -20,6 +21,8 @@ export type TrailerDoc = {
   durationSeconds: number;
   likes?: number;
   createdAt?: Timestamp;
+  vimeoId?: string;
+  vimeoCategories?: string[];
 };
 
 const converter: FirestoreDataConverter<TrailerDoc> = {
@@ -28,17 +31,25 @@ const converter: FirestoreDataConverter<TrailerDoc> = {
   },
   fromFirestore(snapshot) {
     const data = snapshot.data();
+    const vimeoCategories: string[] = data.vimeoCategories ?? [];
+    const vimeoId: string | undefined = data.vimeoId ?? undefined;
+    const derivedGenre = vimeoCategories.length ? mapVimeoCategoriesToGenre(vimeoCategories) : 'Unknown';
+    const trailerUrl = data.trailerUrl || (vimeoId ? buildVimeoEmbedUrl(vimeoId, { autoplay: true, muted: true }) : '');
+    const fullContentUrl = data.fullContentUrl || (vimeoId ? buildVimeoEmbedUrl(vimeoId) : '');
+
     return {
       id: snapshot.id,
       title: data.title ?? '',
-      genre: data.genre ?? 'Unknown',
+      genre: data.genre ?? derivedGenre,
       synopsis: data.synopsis ?? '',
-      trailerUrl: data.trailerUrl ?? '',
-      fullContentUrl: data.fullContentUrl ?? '',
+      trailerUrl,
+      fullContentUrl,
       thumbnailUrl: data.thumbnailUrl ?? '',
       durationSeconds: data.durationSeconds ?? 0,
       likes: data.likes,
-      createdAt: data.createdAt
+      createdAt: data.createdAt,
+      vimeoId,
+      vimeoCategories
     };
   }
 };

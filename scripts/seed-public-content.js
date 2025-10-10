@@ -3,12 +3,57 @@ const path = require('path');
 const fs = require('fs');
 const admin = require('firebase-admin');
 
+const CATEGORY_MAP = {
+  animation: 'Animation',
+  art: 'Art',
+  comedy: 'Comedy',
+  documentary: 'Documentary',
+  drama: 'Drama',
+  educational: 'Educational',
+  experimental: 'Fantasy',
+  fashion: 'Lifestyle',
+  food: 'Lifestyle',
+  kids: 'Family',
+  music: 'Music',
+  news: 'Documentary',
+  people: 'Drama',
+  sports: 'Sports',
+  tech: 'Technology',
+  technology: 'Technology',
+  travel: 'Travel',
+  tutorial: 'Educational',
+  shortfilms: 'Short Film',
+  scifi: 'Sci-Fi',
+  thriller: 'Thriller',
+  horror: 'Horror'
+};
+
+function mapVimeoCategoriesToGenre(categories = []) {
+  for (const category of categories) {
+    const key = String(category).toLowerCase();
+    if (CATEGORY_MAP[key]) {
+      return CATEGORY_MAP[key];
+    }
+  }
+  return 'General';
+}
+
+function buildVimeoEmbedUrl(id, { autoplay = false, muted = false } = {}) {
+  const params = new URLSearchParams();
+  if (autoplay) params.set('autoplay', '1');
+  if (muted) params.set('muted', '1');
+  params.set('title', '0');
+  params.set('byline', '0');
+  params.set('portrait', '0');
+  const query = params.toString();
+  return 'https://player.vimeo.com/video/' + id + (query ? '?' + query : '');
+}
+
 const DEFAULT_BUCKET = 'story-scout.firebasestorage.app';
 const credentialPath = process.env.FIREBASE_ADMIN_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS || path.resolve(__dirname, '../local/serviceAccountKey.json');
 
 if (!fs.existsSync(credentialPath)) {
-  console.error('
-[seed] Service account file not found at ' + credentialPath + '.');
+  console.error('[seed] Service account file not found at ' + credentialPath + '.');
   console.error('Set FIREBASE_ADMIN_CREDENTIALS or GOOGLE_APPLICATION_CREDENTIALS to your JSON key.');
   process.exit(1);
 }
@@ -44,17 +89,25 @@ async function seed() {
     const docRef = db.collection('publicContent').doc(id);
     const createdAt = admin.firestore.Timestamp.fromDate(new Date(now - index * 60000));
 
+    const vimeoId = item.vimeoId || null;
+    const vimeoCategories = item.vimeoCategories || [];
+    const genre = item.genre || mapVimeoCategoriesToGenre(vimeoCategories);
+    const trailerUrl = item.trailerUrl || (vimeoId ? buildVimeoEmbedUrl(vimeoId, { autoplay: true, muted: true }) : '');
+    const fullContentUrl = item.fullContentUrl || (vimeoId ? buildVimeoEmbedUrl(vimeoId) : '');
+
     batch.set(docRef, {
       title: item.title || 'Untitled',
-      genre: item.genre || 'Unknown',
+      genre,
       synopsis: item.synopsis || '',
-      trailerUrl: item.trailerUrl || '',
-      fullContentUrl: item.fullContentUrl || '',
+      trailerUrl,
+      fullContentUrl,
       thumbnailUrl: item.thumbnailUrl || '',
       durationSeconds: item.durationSeconds || 0,
       likes: item.likes || 0,
       creatorId: item.creatorId || item.creator || null,
       creatorName: item.creator || item.creatorName || null,
+      vimeoId,
+      vimeoCategories,
       createdAt
     }, { merge: true });
   });

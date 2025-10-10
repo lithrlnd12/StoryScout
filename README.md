@@ -44,3 +44,12 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 - Web client fetches Firestore data through helpers in shared/firebase; start with yarn workspace story-scout-web dev.
 - Expo Metro bundler is configured (mobile/metro.config.js) to watch the shared workspace; run yarn workspace story-scout-mobile start.
 - Use Firebase emulators for Firestore and Storage via firebase emulators:start --only firestore,storage (ports configured in firebase.json).
+
+- Vimeo client ID (free films): set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
+
+### Running Locally
+- Use Node >= 20.19.x to satisfy the React Native engine requirement.
+- Install dependencies: run npx -y yarn@1.22.22 install from an elevated prompt if Windows blocks symlinks.
+- Web client: yarn workspace story-scout-web dev (Vite dev server).
+- Mobile client: yarn workspace story-scout-mobile start (Expo CLI; press a for Android).
+- Optional seeding: set FIREBASE_ADMIN_CREDENTIALS to your service-account JSON path then execute node scripts/seed-public-content.js to refresh mock Vimeo data.
