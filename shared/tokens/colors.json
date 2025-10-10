@@ -1,0 +1,14 @@
+{
+  "backgroundPrimary": "#0F121A",
+  "backgroundSecondary": "#181C27",
+  "accentMagenta": "#FF2E80",
+  "accentCyan": "#1ED2FF",
+  "accentGradient": ["#FF2E80", "#1ED2FF"],
+  "textPrimary": "#FFFFFF",
+  "textSecondary": "#C1C7D0",
+  "textMuted": "#8A90A0",
+  "borderDefault": "#2A2F3C",
+  "success": "#58D68D",
+  "warning": "#F5B041",
+  "error": "#E74C3C"
+}

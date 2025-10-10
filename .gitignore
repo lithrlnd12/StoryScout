@@ -1,0 +1,12 @@
+node_modules/
+.local/
+.env*
+mobile/.env*
+web/.env*
+local/
+.DS_Store
+firebase-debug.log
+npm-debug.log*
+yarn-error.log*
+
+# Service account keys should live in local/ and stay untracked

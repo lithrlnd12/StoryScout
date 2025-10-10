@@ -1,0 +1,38 @@
+[
+  {
+    "id": "trailer_001",
+    "title": "AI Frontiers",
+    "genre": "Action",
+    "durationSeconds": 75,
+    "trailerUrl": "https://cdn.example.com/trailers/ai-frontiers-vertical.mp4",
+    "fullContentUrl": "https://cdn.example.com/full/ai-frontiers.mp4",
+    "creator": "Quantum Studios",
+    "synopsis": "A robotics researcher races to stop her invention from being weaponized.",
+    "thumbnailUrl": "https://cdn.example.com/thumbnails/ai-frontiers.jpg",
+    "likes": 12000
+  },
+  {
+    "id": "trailer_002",
+    "title": "The Mentor",
+    "genre": "Drama",
+    "durationSeconds": 68,
+    "trailerUrl": "https://cdn.example.com/trailers/the-mentor-vertical.mp4",
+    "fullContentUrl": "https://cdn.example.com/full/the-mentor.mp4",
+    "creator": "Elevate Films",
+    "synopsis": "An educator helps a prodigy navigate the future of immersive learning.",
+    "thumbnailUrl": "https://cdn.example.com/thumbnails/the-mentor.jpg",
+    "likes": 8600
+  },
+  {
+    "id": "trailer_003",
+    "title": "Carbon Rewrite",
+    "genre": "Sci-Fi",
+    "durationSeconds": 82,
+    "trailerUrl": "https://cdn.example.com/trailers/carbon-rewrite-vertical.mp4",
+    "fullContentUrl": "https://cdn.example.com/full/carbon-rewrite.mp4",
+    "creator": "Nebula Network",
+    "synopsis": "A journalist uncovers a climate conspiracy that spans multiple realities.",
+    "thumbnailUrl": "https://cdn.example.com/thumbnails/carbon-rewrite.jpg",
+    "likes": 9400
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "name": "story-scout-functions",
+  "description": "Cloud Functions for Story Scout",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "deploy": "firebase deploy --only functions"
+  },
+  "main": "lib/index.js",
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.8.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "eslint": "^8.57.0"
+  }
+}

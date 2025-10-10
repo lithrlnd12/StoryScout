@@ -1,0 +1,20 @@
+{
+  "name": "story-scout",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "web",
+    "shared"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "lint": "echo \"Add lint scripts per workspace\"",
+    "test": "echo \"Add tests per workspace\"",
+    "seed:public": "node scripts/seed-public-content.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.5.0"
+  }
+}
