@@ -1,27 +1,8 @@
 import type { FirebaseOptions } from 'firebase/app';
-
-const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : undefined;
-const nodeEnv = typeof process !== 'undefined' ? process.env : undefined;
+import { getEnvValue } from '../utils/env';
 
 function readEnv(key: string): string | undefined {
-  if (env && typeof env[key] === 'string') {
-    return env[key] as string;
-  }
-  if (nodeEnv && typeof nodeEnv[key] === 'string') {
-    return nodeEnv[key];
-  }
-  return undefined;
-}
-
-function requireEnv(keys: string[]): Record<string, string> {
-  const values: Record<string, string> = {};
-  keys.forEach(key => {
-    const value = readEnv(key);
-    if (value) {
-      values[key] = value;
-    }
-  });
-  return values;
+  return getEnvValue(key);
 }
 
 const values = {

@@ -1,3 +1,5 @@
+import { getEnvValue } from '../utils/env';
+
 export type VimeoCategory = string;
 
 const CATEGORY_MAP: Record<VimeoCategory, string> = {
@@ -41,25 +43,13 @@ export function mapVimeoCategoriesToGenre(categories?: VimeoCategory[] | null): 
 }
 
 export function buildVimeoEmbedUrl(vimeoId: string, options?: { autoplay?: boolean; muted?: boolean }) {
-  const params = new URLSearchParams();
-  if (options?.autoplay) params.set('autoplay', '1');
-  if (options?.muted) params.set('muted', '1');
-  params.set('title', '0');
-  params.set('byline', '0');
-  params.set('portrait', '0');
-  const query = params.toString();
-  return 'https://player.vimeo.com/video/' + vimeoId + (query ? '?' + query : '');
+  const params: string[] = ['title=0', 'byline=0', 'portrait=0'];
+  if (options?.autoplay) params.push('autoplay=1');
+  if (options?.muted) params.push('muted=1');
+  const query = params.length ? '?' + params.join('&') : '';
+  return 'https://player.vimeo.com/video/' + vimeoId + query;
 }
 
 export function getVimeoClientId(): string | undefined {
-  if (typeof process !== 'undefined' && process.env?.VIMEO_CLIENT_ID) {
-    return process.env.VIMEO_CLIENT_ID;
-  }
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.VIMEO_CLIENT_ID) {
-    return (import.meta as any).env.VIMEO_CLIENT_ID;
-  }
-  if (typeof global !== 'undefined' && (global as any).VIMEO_CLIENT_ID) {
-    return (global as any).VIMEO_CLIENT_ID;
-  }
-  return undefined;
+  return getEnvValue('VIMEO_CLIENT_ID');
 }
