@@ -1,3 +1,4 @@
+
 # Story Scout
 
 Monorepo scaffolding for the Story Scout discovery platform. The repo is organized to support simultaneous delivery of mobile (Android/iOS), web, and streaming (Roku/Fire TV) apps from a shared design system and content schema.
@@ -45,7 +46,10 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 - Expo Metro bundler is configured (mobile/metro.config.js) to watch the shared workspace; run yarn workspace story-scout-mobile start.
 - Use Firebase emulators for Firestore and Storage via firebase emulators:start --only firestore,storage (ports configured in firebase.json).
 
-- Vimeo client ID (free films): set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
+- Vimeo integration (free films):
+  - Set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
+  - Set VIMEO_ACCESS_TOKEN (get from https://developer.vimeo.com/apps - requires a Vimeo account with "Public" and "Private" scopes).
+  - To fetch real Vimeo content: deploy Cloud Function `syncVimeoContent` and call it via HTTP to populate Firestore with Creative Commons videos.
 
 ### Running Locally
 - Use Node >= 20.19.x to satisfy the React Native engine requirement.

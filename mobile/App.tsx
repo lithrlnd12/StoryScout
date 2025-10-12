@@ -11,10 +11,11 @@ import {
   FlatList,
   ImageBackground,
   ScrollView,
-  Linking
+  Modal
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { WebView } from 'react-native-webview';
 
 import tokens from '../shared/tokens/colors.json';
 import trailers from '../shared/mocks/trailers.json';
@@ -68,6 +69,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [expandedSynopsis, setExpandedSynopsis] = useState<Record<string, boolean>>({});
+  const [watchingFull, setWatchingFull] = useState<string | null>(null);
   const listRef = useRef<FlatList<TrailerDoc>>(null);
 
   useEffect(() => {
@@ -80,15 +83,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    subscribeToAuthChanges(current => {
+    const unsubscribe = subscribeToAuthChanges(current => {
       setUser(current);
-    }).then(unsub => {
-      unsubscribe = unsub;
     });
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -110,7 +108,6 @@ export default function App() {
       if (trailer.genre) {
         set.add(trailer.genre);
       }
-      trailer.vimeoCategories?.forEach(category => set.add(category));
     });
     return ['All', ...Array.from(set)];
   }, [feed]);
@@ -119,11 +116,9 @@ export default function App() {
     if (selectedGenre === 'All') {
       return feed;
     }
-    const target = selectedGenre.toLowerCase();
-    return feed.filter(trailer => {
-      if (trailer.genre?.toLowerCase() === target) return true;
-      return trailer.vimeoCategories?.some(category => category.toLowerCase() === target);
-    });
+    return feed.filter(trailer =>
+      trailer.genre?.toLowerCase() === selectedGenre.toLowerCase()
+    );
   }, [feed, selectedGenre]);
 
   useEffect(() => {
@@ -169,15 +164,18 @@ export default function App() {
     await signOutFirebase().catch(() => undefined);
   };
 
-  const handleWatchFull = (url: string) => {
-    if (!url) {
-      return;
-    }
-    Linking.openURL(url).catch(() => undefined);
+  const handleWatchFull = (vimeoId: string) => {
+    if (!vimeoId) return;
+    setWatchingFull(vimeoId);
   };
 
   const handleSave = () => {
     // Placeholder for future watchlist functionality
+  };
+
+  const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + '...';
   };
 
   if (!ready) {
@@ -228,25 +226,77 @@ export default function App() {
     );
   }
 
-  const renderItem = ({ item }: { item: TrailerDoc }) => (
-    <View style={styles.cardContainer}>
-      <ImageBackground source={{ uri: item.thumbnailUrl }} style={styles.thumbnail}>
-        <View style={styles.videoOverlay}>
-          <Text style={styles.genre}>{item.genre}</Text>
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.synopsis}>{item.synopsis}</Text>
-          <View style={styles.ctaRow}>
-            <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item.fullContentUrl || item.trailerUrl)}>
-              <Text style={styles.primaryCtaText}>Watch Full</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
-              <Text style={styles.secondaryCtaText}>Save</Text>
-            </TouchableOpacity>
+  const renderItem = ({ item }: { item: TrailerDoc }) => {
+    const isExpanded = expandedSynopsis[item.id];
+    const synopsisText = isExpanded ? item.synopsis : truncateText(item.synopsis, 100);
+
+    return (
+      <View style={styles.cardContainer}>
+        <ImageBackground
+          source={{ uri: item.thumbnailUrl }}
+          style={styles.thumbnail}
+          resizeMode="cover"
+        >
+          <View style={styles.videoOverlay}>
+            <Text style={styles.genre}>{item.genre}</Text>
+            <Text style={styles.title}>{item.title}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <Text style={styles.synopsis}>{synopsisText}</Text>
+              {item.synopsis.length > 100 && (
+                <TouchableOpacity onPress={() => setExpandedSynopsis({ ...expandedSynopsis, [item.id]: !isExpanded })}>
+                  <Text style={[styles.synopsis, { fontWeight: '700', marginLeft: 4 }]}>
+                    {isExpanded ? 'less' : 'more'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.ctaRow}>
+              <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item.vimeoId || '')}>
+                <Text style={styles.primaryCtaText}>Watch Full</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
+                <Text style={styles.secondaryCtaText}>Save</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </ImageBackground>
-    </View>
-  );
+        </ImageBackground>
+      </View>
+    );
+  };
+
+  if (watchingFull) {
+    const fullVideoSrc = `https://player.vimeo.com/video/${watchingFull}?autoplay=1&title=0&byline=0&portrait=0`;
+    return (
+      <Modal visible={true} animationType="slide">
+        <SafeAreaView style={{ flex: 1, backgroundColor: tokens.backgroundPrimary }}>
+          <StatusBar style="light" />
+          <TouchableOpacity
+            onPress={() => setWatchingFull(null)}
+            style={{
+              position: 'absolute',
+              top: 50,
+              left: 20,
+              zIndex: 1000,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              borderRadius: 24,
+              width: 48,
+              height: 48,
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Text style={{ color: tokens.textPrimary, fontSize: 24 }}>←</Text>
+          </TouchableOpacity>
+          <WebView
+            source={{ uri: fullVideoSrc }}
+            style={{ flex: 1 }}
+            allowsFullscreenVideo
+            mediaPlaybackRequiresUserAction={false}
+          />
+        </SafeAreaView>
+      </Modal>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -348,7 +398,8 @@ const styles = StyleSheet.create({
   },
   genreRow: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
     columnGap: 12
   },
   genrePill: {
@@ -374,15 +425,17 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     height: ITEM_HEIGHT,
-    justifyContent: 'flex-end'
+    width: '100%'
   },
   thumbnail: {
-    height: ITEM_HEIGHT,
+    flex: 1,
+    width: '100%',
     justifyContent: 'flex-end'
   },
   videoOverlay: {
     padding: 24,
-    backgroundColor: 'rgba(15,18,26,0.45)'
+    paddingBottom: 60,
+    backgroundColor: 'rgba(15,18,26,0.75)'
   },
   genre: {
     color: tokens.accentCyan,
@@ -391,13 +444,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: tokens.textPrimary,
-    fontSize: 28,
-    fontWeight: '700'
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 4
   },
   synopsis: {
     color: tokens.textSecondary,
-    marginTop: 12,
-    marginBottom: 24
+    marginTop: 8,
+    marginBottom: 12,
+    lineHeight: 20
   },
   ctaRow: {
     flexDirection: 'row',
