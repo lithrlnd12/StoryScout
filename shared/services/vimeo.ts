@@ -51,10 +51,14 @@ export function mapVimeoCategoriesToGenre(categories?: VimeoCategory[] | null): 
   return DEFAULT_GENRE;
 }
 
-export function buildVimeoEmbedUrl(vimeoId: string, options?: { autoplay?: boolean; muted?: boolean }) {
+export function buildVimeoEmbedUrl(
+  vimeoId: string,
+  options?: { autoplay?: boolean; muted?: boolean; loop?: boolean }
+) {
   const params: string[] = ['title=0', 'byline=0', 'portrait=0'];
   if (options?.autoplay) params.push('autoplay=1');
   if (options?.muted) params.push('muted=1');
+  if (options?.loop) params.push('loop=1');
   const query = params.length ? '?' + params.join('&') : '';
   return 'https://player.vimeo.com/video/' + vimeoId + query;
 }

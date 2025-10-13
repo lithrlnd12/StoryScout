@@ -1,7 +1,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFirebaseAnalytics } from '@shared/firebase/client';
-import { subscribeToPublicContent, type TrailerDoc } from '@shared/firebase/firestore';
+import {
+  subscribeToPublicContent,
+  toggleLike,
+  shareContent,
+  getUserEngagement,
+  submitReview,
+  type TrailerDoc
+} from '@shared/firebase/firestore';
 import {
   subscribeToAuthChanges,
   signInWithEmail,
@@ -13,18 +20,30 @@ import tokens from '@tokens/colors.json';
 import mockData from '@mocks/trailers.json';
 
 const gradients = tokens.accentGradient as string[];
-const fallbackFeed: TrailerDoc[] = mockData.map(item => ({
+const fallbackFeed: TrailerDoc[] = (mockData as any[]).map((item: any) => ({
   id: item.id,
   title: item.title,
   genre: item.genre,
   synopsis: item.synopsis,
-  trailerUrl: item.trailerUrl ?? '',
-  fullContentUrl: item.fullContentUrl ?? '',
+
+  // Trailer (for feed) - uses same video as full content for now
+  trailerType: 'vimeo' as const,
+  trailerVideoId: item.vimeoId,
+  trailerDurationSeconds: item.durationSeconds,
+
+  // Full content (for Watch Now)
+  fullContentType: 'vimeo' as const,
+  fullContentVideoId: item.vimeoId,
+  fullContentDurationSeconds: item.durationSeconds,
+
   thumbnailUrl: item.thumbnailUrl ?? '',
-  durationSeconds: item.durationSeconds ?? 0,
   likes: item.likes ?? 0,
+  shares: item.shares ?? 0,
+  reviews: item.reviews ?? 0,
+  averageRating: item.averageRating ?? 0,
   vimeoId: item.vimeoId,
-  vimeoCategories: item.vimeoCategories
+  vimeoCategories: item.vimeoCategories,
+  durationSeconds: item.durationSeconds
 }));
 
 type AuthMode = 'signin' | 'signup';
@@ -42,6 +61,11 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false);
   const [expandedSynopsis, setExpandedSynopsis] = useState<Record<string, boolean>>({});
   const [watchingFull, setWatchingFull] = useState<string | null>(null);
+  const [likedItems, setLikedItems] = useState<Record<string, boolean>>({});
+  const [showReviewModal, setShowReviewModal] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -166,17 +190,92 @@ export default function App() {
     return text.slice(0, maxLength) + '...';
   };
 
+  const handleLike = async (contentId: string) => {
+    if (!user) return;
+    try {
+      const isLiked = await toggleLike(user.uid, contentId);
+      setLikedItems(prev => ({ ...prev, [contentId]: isLiked }));
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleShare = async (item: TrailerDoc) => {
+    if (!user) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: item.title,
+          text: `Check out ${item.title} on Story Scout!`,
+          url: window.location.href
+        });
+      } else {
+        // Fallback: copy to clipboard
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Link copied to clipboard!');
+      }
+      await shareContent(user.uid, item.id);
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  const handleReviewPress = (contentId: string) => {
+    setShowReviewModal(contentId);
+    setReviewRating(5);
+    setReviewText('');
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user || !showReviewModal) return;
+    setSubmittingReview(true);
+    try {
+      await submitReview(user.uid, showReviewModal, reviewRating, reviewText);
+      setShowReviewModal(null);
+      setReviewText('');
+      setReviewRating(5);
+    } catch (error) {
+      console.error('Error submitting review:', error);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // Load user engagement state when trailers change
+  useEffect(() => {
+    if (!user) return;
+
+    const loadEngagements = async () => {
+      const engagements: Record<string, boolean> = {};
+      for (const item of trailers) {
+        try {
+          const { hasLiked } = await getUserEngagement(user.uid, item.id);
+          engagements[item.id] = hasLiked;
+        } catch (error) {
+          console.error('Error loading engagement:', error);
+        }
+      }
+      setLikedItems(engagements);
+    };
+
+    loadEngagements();
+  }, [trailers, user]);
+
   const renderCard = (trailer: TrailerDoc, index: number) => {
     const isActive = index === currentIndex;
     const autoplay = isActive ? '1' : '0';
+
+    // Use trailer video for feed
+    const trailerVideoId = trailer.trailerVideoId || trailer.vimeoId;
     const iframeSrc = trailer.trailerUrl || (
-      trailer.vimeoId
-        ? 'https://player.vimeo.com/video/' + trailer.vimeoId + '?autoplay=' + autoplay + '&muted=1&title=0&byline=0&portrait=0'
+      trailerVideoId
+        ? 'https://player.vimeo.com/video/' + trailerVideoId + '?autoplay=' + autoplay + '&muted=1&loop=1&title=0&byline=0&portrait=0'
         : ''
     );
     const transform = 'translateY(' + (index - currentIndex) * 100 + 'vh)';
     const isExpanded = expandedSynopsis[trailer.id];
     const synopsisText = isExpanded ? trailer.synopsis : truncateText(trailer.synopsis, 100);
+    const isLiked = likedItems[trailer.id] || false;
 
     return (
       <section
@@ -213,6 +312,41 @@ export default function App() {
                 }}
               />
             )}
+            {/* TikTok-style engagement bar */}
+            <div style={engagementBarStyle}>
+              {/* Like button */}
+              <button style={engagementButtonStyle} onClick={() => handleLike(trailer.id)}>
+                <div style={iconContainerStyle}>
+                  <span style={engagementIconStyle}>
+                    {isLiked ? '❤️' : '🤍'}
+                  </span>
+                </div>
+                <span style={engagementCountStyle}>
+                  {(trailer.likes ?? 0) >= 1000 ? `${((trailer.likes ?? 0) / 1000).toFixed(1)}K` : trailer.likes ?? 0}
+                </span>
+              </button>
+
+              {/* Review button */}
+              <button style={engagementButtonStyle} onClick={() => handleReviewPress(trailer.id)}>
+                <div style={iconContainerStyle}>
+                  <span style={engagementIconStyle}>💬</span>
+                </div>
+                <span style={engagementCountStyle}>
+                  {(trailer.reviews ?? 0) >= 1000 ? `${((trailer.reviews ?? 0) / 1000).toFixed(1)}K` : trailer.reviews ?? 0}
+                </span>
+              </button>
+
+              {/* Share button */}
+              <button style={engagementButtonStyle} onClick={() => handleShare(trailer)}>
+                <div style={iconContainerStyle}>
+                  <span style={engagementIconStyle}>↗️</span>
+                </div>
+                <span style={engagementCountStyle}>
+                  {(trailer.shares ?? 0) >= 1000 ? `${((trailer.shares ?? 0) / 1000).toFixed(1)}K` : trailer.shares ?? 0}
+                </span>
+              </button>
+            </div>
+
             <div style={overlayStyle}>
               <div style={metadataStyle}>
                 <span style={genrePillStyle}>{trailer.genre}</span>
@@ -236,8 +370,11 @@ export default function App() {
                   )}
                 </p>
                 <div style={actionsRowStyle}>
-                  <button style={primaryButtonStyle} onClick={() => setWatchingFull(trailer.vimeoId || '')}>
-                    Watch Full
+                  <button
+                    style={primaryButtonStyle}
+                    onClick={() => setWatchingFull(trailer.fullContentVideoId || trailer.vimeoId || '')}
+                  >
+                    Watch Now
                   </button>
                   <button style={secondaryButtonStyle} onClick={() => alert('Watchlist coming soon!')}>
                     Save
@@ -250,6 +387,56 @@ export default function App() {
       </section>
     );
   };
+
+  if (showReviewModal) {
+    const currentItem = trailers.find(item => item.id === showReviewModal);
+    return (
+      <div style={modalOverlayStyle}>
+        <div style={reviewModalStyle}>
+          <div style={modalHeaderStyle}>
+            <h2 style={{ margin: 0, fontSize: 24, color: tokens.textPrimary }}>Write a Review</h2>
+            <button onClick={() => setShowReviewModal(null)} style={modalCloseButtonStyle}>✕</button>
+          </div>
+
+          {currentItem && (
+            <p style={{ color: tokens.textSecondary, marginBottom: 20 }}>{currentItem.title}</p>
+          )}
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', color: tokens.textPrimary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
+              Rating
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  onClick={() => setReviewRating(star)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 36, padding: 0 }}
+                >
+                  {star <= reviewRating ? '⭐' : '☆'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <textarea
+            placeholder="Share your thoughts..."
+            value={reviewText}
+            onChange={e => setReviewText(e.target.value)}
+            style={reviewTextareaStyle}
+          />
+
+          <button
+            onClick={handleSubmitReview}
+            disabled={submittingReview}
+            style={{ ...primaryButtonStyle, opacity: submittingReview ? 0.6 : 1 }}
+          >
+            {submittingReview ? 'Submitting...' : 'Submit Review'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (watchingFull) {
     const fullVideoSrc = 'https://player.vimeo.com/video/' + watchingFull + '?autoplay=1&title=0&byline=0&portrait=0';
@@ -395,8 +582,8 @@ const headerStyle: React.CSSProperties = {
 
 const genreBarStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 12,
-  padding: '8px 32px 12px',
+  gap: 10,
+  padding: '8px 32px 16px',
   overflowX: 'auto',
   msOverflowStyle: 'none',
   scrollbarWidth: 'none'
@@ -404,19 +591,22 @@ const genreBarStyle: React.CSSProperties = {
 
 const genreButtonStyle: React.CSSProperties = {
   borderRadius: 999,
-  border: '1px solid ' + tokens.borderDefault,
-  padding: '8px 16px',
-  backgroundColor: 'transparent',
+  border: '1.5px solid ' + tokens.borderDefault,
+  padding: '9px 18px',
+  backgroundColor: 'rgba(15,18,26,0.4)',
   color: tokens.textSecondary,
   cursor: 'pointer',
-  whiteSpace: 'nowrap'
+  whiteSpace: 'nowrap',
+  fontWeight: 500,
+  transition: 'all 0.2s ease'
 };
 
 const genreButtonActiveStyle: React.CSSProperties = {
   ...genreButtonStyle,
   backgroundImage: 'linear-gradient(135deg, ' + tokens.accentMagenta + ', ' + tokens.accentCyan + ')',
   border: 'none',
-  color: tokens.textPrimary
+  color: tokens.textPrimary,
+  fontWeight: 600
 };
 
 const feedViewportStyle: React.CSSProperties = {
@@ -453,12 +643,57 @@ const iframeStyle: React.CSSProperties = {
   pointerEvents: 'none'
 };
 
+const engagementBarStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: 20,
+  bottom: '35%',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 24,
+  zIndex: 10
+};
+
+const engagementButtonStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  backgroundColor: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 0
+};
+
+const iconContainerStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  borderRadius: '50%',
+  width: 48,
+  height: 48,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'transform 0.2s ease, background-color 0.2s ease'
+};
+
+const engagementIconStyle: React.CSSProperties = {
+  fontSize: 28
+};
+
+const engagementCountStyle: React.CSSProperties = {
+  color: tokens.textPrimary,
+  fontSize: 13,
+  fontWeight: 700,
+  textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)'
+};
+
 const overlayStyle: React.CSSProperties = {
   position: 'absolute',
   bottom: 0,
   left: 0,
   right: 0,
   padding: '32px 24px 24px 24px',
+  paddingRight: 100,
   background: 'linear-gradient(0deg, rgba(15,18,26,0.92) 0%, rgba(15,18,26,0.0) 100%)',
   paddingBottom: 32
 };
@@ -545,4 +780,57 @@ const emptyStateStyle: React.CSSProperties = {
   left: '50%',
   transform: 'translate(-50%, -40%)',
   textAlign: 'center'
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 10000
+};
+
+const reviewModalStyle: React.CSSProperties = {
+  backgroundColor: tokens.backgroundSecondary,
+  borderRadius: 16,
+  padding: 32,
+  width: '100%',
+  maxWidth: 500,
+  margin: 20
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 20
+};
+
+const modalCloseButtonStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: tokens.textSecondary,
+  fontSize: 32,
+  cursor: 'pointer',
+  padding: 0,
+  lineHeight: 1
+};
+
+const reviewTextareaStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 120,
+  backgroundColor: tokens.backgroundPrimary,
+  color: tokens.textPrimary,
+  border: '1px solid ' + tokens.borderDefault,
+  borderRadius: 12,
+  padding: 16,
+  fontSize: 16,
+  fontFamily: 'inherit',
+  marginBottom: 20,
+  resize: 'vertical'
 };

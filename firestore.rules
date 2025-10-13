@@ -10,6 +10,20 @@ service cloud.firestore {
       allow create: if request.auth != null;
     }
 
+    // Engagements: users can create/read their own, read others
+    match /engagements/{engagementId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Reviews: users can create/update/delete their own, read all
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

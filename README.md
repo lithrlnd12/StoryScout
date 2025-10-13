@@ -40,16 +40,35 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 ### Local CLI Notes
 - Firebase CLI v14 requires Node >=20. Use the vendored runtime in .local/node20/node-v20.16.0-linux-x64/bin when running firebase commands.
 
+## Features
+
+### Engagement System
+- **TikTok-Style Interactions**: Vertical engagement bar with likes, reviews, and shares
+- **Review System**: 5-star ratings with text reviews
+- **Real-time Updates**: Engagement counts update live across all users
+- **Social Sharing**: Native share on mobile, Web Share API on desktop
+
+### Content Architecture
+- **Flexible Video Sources**: Support for Vimeo, YouTube, Internet Archive, and external links
+- **Trailer + Full Content**: Separate trailer videos for feed and full-length content
+- **Auto-play Trailers**: Muted, looping trailers in feed; full videos on demand
+
+### Cross-Platform
+- **Mobile**: React Native (Expo) with iOS and Android support
+- **Web**: Responsive React + Vite app
+- **Shared**: Common Firebase backend and design tokens
+
 ## Development Notes
 - Copy environment example files (.env.example, mobile/.env.example, web/.env.example) to real .env files before running apps.
 - Web client fetches Firestore data through helpers in shared/firebase; start with yarn workspace story-scout-web dev.
 - Expo Metro bundler is configured (mobile/metro.config.js) to watch the shared workspace; run yarn workspace story-scout-mobile start.
 - Use Firebase emulators for Firestore and Storage via firebase emulators:start --only firestore,storage (ports configured in firebase.json).
 
-- Vimeo integration (free films):
-  - Set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
-  - Set VIMEO_ACCESS_TOKEN (get from https://developer.vimeo.com/apps - requires a Vimeo account with "Public" and "Private" scopes).
-  - To fetch real Vimeo content: deploy Cloud Function `syncVimeoContent` and call it via HTTP to populate Firestore with Creative Commons videos.
+### Vimeo Integration
+- Set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
+- Set VIMEO_ACCESS_TOKEN (get from https://developer.vimeo.com/apps - requires a Vimeo account with "Public" and "Private" scopes).
+- To fetch real Vimeo content: deploy Cloud Function `syncVimeoContent` and call it via HTTP to populate Firestore with Creative Commons videos.
+- Massive library available through Vimeo Staff Picks and curated collections
 
 ### Running Locally
 - Use Node >= 20.19.x to satisfy the React Native engine requirement.
@@ -57,3 +76,40 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 - Web client: yarn workspace story-scout-web dev (Vite dev server).
 - Mobile client: yarn workspace story-scout-mobile start (Expo CLI; press a for Android).
 - Optional seeding: set FIREBASE_ADMIN_CREDENTIALS to your service-account JSON path then execute node scripts/seed-public-content.js to refresh mock Vimeo data.
+
+### Deployment
+```bash
+# Build web app
+cd web && npm run build && cd ..
+
+# Deploy Firestore rules only
+firebase deploy --only firestore:rules
+
+# Deploy web hosting
+firebase deploy --only hosting
+
+# Deploy everything
+firebase deploy
+```
+
+## Database Schema
+
+### Collections
+
+#### publicContent
+Content catalog with trailer and full video references:
+- `trailerType`, `trailerVideoId`: Trailer source for feed
+- `fullContentType`, `fullContentVideoId`: Full content source
+- `likes`, `shares`, `reviews`, `averageRating`: Engagement metrics
+
+#### engagements
+User interactions (likes, shares):
+- `userId`, `contentId`, `type`, `createdAt`
+- Automatic count updates to `publicContent`
+
+#### reviews
+User reviews with ratings:
+- `userId`, `contentId`, `rating` (1-5), `reviewText`
+- Auto-calculates `averageRating` on `publicContent`
+
+See `CHANGELOG.md` for detailed schema documentation.

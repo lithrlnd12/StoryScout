@@ -9,7 +9,14 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": "./src"
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/*"],
+      "@tokens/*": ["../shared/tokens/*"],
+      "@mocks/*": ["../shared/mocks/*"]
+    },
+    "types": ["vite/client"]
   },
   "include": ["src"],
   "references": []

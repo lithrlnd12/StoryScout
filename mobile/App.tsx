@@ -11,7 +11,8 @@ import {
   FlatList,
   ImageBackground,
   ScrollView,
-  Modal
+  Modal,
+  Share
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -19,7 +20,14 @@ import { WebView } from 'react-native-webview';
 
 import tokens from '../shared/tokens/colors.json';
 import trailers from '../shared/mocks/trailers.json';
-import { subscribeToPublicContent, type TrailerDoc } from '../shared/firebase/firestore';
+import {
+  subscribeToPublicContent,
+  toggleLike,
+  shareContent,
+  getUserEngagement,
+  submitReview,
+  type TrailerDoc
+} from '../shared/firebase/firestore';
 import {
   subscribeToAuthChanges,
   signInWithEmail,
@@ -30,18 +38,30 @@ import {
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-const fallbackFeed: TrailerDoc[] = trailers.map(item => ({
+const fallbackFeed: TrailerDoc[] = (trailers as any[]).map((item: any) => ({
   id: item.id,
   title: item.title,
   genre: item.genre,
   synopsis: item.synopsis,
-  trailerUrl: item.trailerUrl ?? '',
-  fullContentUrl: item.fullContentUrl ?? '',
+
+  // Trailer (for feed) - uses same video as full content for now
+  trailerType: 'vimeo' as const,
+  trailerVideoId: item.vimeoId,
+  trailerDurationSeconds: item.durationSeconds,
+
+  // Full content (for Watch Now)
+  fullContentType: 'vimeo' as const,
+  fullContentVideoId: item.vimeoId,
+  fullContentDurationSeconds: item.durationSeconds,
+
   thumbnailUrl: item.thumbnailUrl ?? '',
-  durationSeconds: item.durationSeconds ?? 0,
   likes: item.likes ?? 0,
+  shares: item.shares ?? 0,
+  reviews: item.reviews ?? 0,
+  averageRating: item.averageRating ?? 0,
   vimeoId: item.vimeoId,
-  vimeoCategories: item.vimeoCategories
+  vimeoCategories: item.vimeoCategories,
+  durationSeconds: item.durationSeconds
 }));
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -71,6 +91,11 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [expandedSynopsis, setExpandedSynopsis] = useState<Record<string, boolean>>({});
   const [watchingFull, setWatchingFull] = useState<string | null>(null);
+  const [likedItems, setLikedItems] = useState<Record<string, boolean>>({});
+  const [showReviewModal, setShowReviewModal] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
   const listRef = useRef<FlatList<TrailerDoc>>(null);
 
   useEffect(() => {
@@ -164,19 +189,84 @@ export default function App() {
     await signOutFirebase().catch(() => undefined);
   };
 
-  const handleWatchFull = (vimeoId: string) => {
-    if (!vimeoId) return;
-    setWatchingFull(vimeoId);
+  const handleWatchFull = (item: TrailerDoc) => {
+    const videoId = item.fullContentVideoId || item.vimeoId;
+    if (!videoId) return;
+    setWatchingFull(videoId);
   };
 
   const handleSave = () => {
     // Placeholder for future watchlist functionality
   };
 
+  const handleLike = async (contentId: string) => {
+    if (!user) return;
+    try {
+      const isLiked = await toggleLike(user.uid, contentId);
+      setLikedItems(prev => ({ ...prev, [contentId]: isLiked }));
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleShare = async (item: TrailerDoc) => {
+    if (!user) return;
+    try {
+      await Share.share({
+        message: `Check out ${item.title} on Story Scout!`,
+        title: item.title
+      });
+      await shareContent(user.uid, item.id);
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  const handleReviewPress = (contentId: string) => {
+    setShowReviewModal(contentId);
+    setReviewRating(5);
+    setReviewText('');
+  };
+
+  const handleSubmitReview = async () => {
+    if (!user || !showReviewModal) return;
+    setSubmittingReview(true);
+    try {
+      await submitReview(user.uid, showReviewModal, reviewRating, reviewText);
+      setShowReviewModal(null);
+      setReviewText('');
+      setReviewRating(5);
+    } catch (error) {
+      console.error('Error submitting review:', error);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
   };
+
+  // Load user engagement state when feed changes
+  useEffect(() => {
+    if (!user) return;
+
+    const loadEngagements = async () => {
+      const engagements: Record<string, boolean> = {};
+      for (const item of feed) {
+        try {
+          const { hasLiked } = await getUserEngagement(user.uid, item.id);
+          engagements[item.id] = hasLiked;
+        } catch (error) {
+          console.error('Error loading engagement:', error);
+        }
+      }
+      setLikedItems(engagements);
+    };
+
+    loadEngagements();
+  }, [feed, user]);
 
   if (!ready) {
     return null;
@@ -229,6 +319,7 @@ export default function App() {
   const renderItem = ({ item }: { item: TrailerDoc }) => {
     const isExpanded = expandedSynopsis[item.id];
     const synopsisText = isExpanded ? item.synopsis : truncateText(item.synopsis, 100);
+    const isLiked = likedItems[item.id] || false;
 
     return (
       <View style={styles.cardContainer}>
@@ -237,6 +328,53 @@ export default function App() {
           style={styles.thumbnail}
           resizeMode="cover"
         >
+          {/* TikTok-style engagement bar */}
+          <View style={styles.engagementBar}>
+            {/* Like button */}
+            <TouchableOpacity
+              style={styles.engagementButton}
+              onPress={() => handleLike(item.id)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.engagementIcon}>
+                  {isLiked ? '❤️' : '🤍'}
+                </Text>
+              </View>
+              <Text style={styles.engagementCount}>
+                {item.likes >= 1000 ? `${(item.likes / 1000).toFixed(1)}K` : item.likes || 0}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Review button */}
+            <TouchableOpacity
+              style={styles.engagementButton}
+              onPress={() => handleReviewPress(item.id)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.engagementIcon}>💬</Text>
+              </View>
+              <Text style={styles.engagementCount}>
+                {item.reviews >= 1000 ? `${(item.reviews / 1000).toFixed(1)}K` : item.reviews || 0}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Share button */}
+            <TouchableOpacity
+              style={styles.engagementButton}
+              onPress={() => handleShare(item)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.engagementIcon}>↗️</Text>
+              </View>
+              <Text style={styles.engagementCount}>
+                {item.shares >= 1000 ? `${(item.shares / 1000).toFixed(1)}K` : item.shares || 0}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.videoOverlay}>
             <Text style={styles.genre}>{item.genre}</Text>
             <Text style={styles.title}>{item.title}</Text>
@@ -251,8 +389,8 @@ export default function App() {
               )}
             </View>
             <View style={styles.ctaRow}>
-              <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item.vimeoId || '')}>
-                <Text style={styles.primaryCtaText}>Watch Full</Text>
+              <TouchableOpacity style={styles.primaryCta} onPress={() => handleWatchFull(item)}>
+                <Text style={styles.primaryCtaText}>Watch Now</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
                 <Text style={styles.secondaryCtaText}>Save</Text>
@@ -263,6 +401,64 @@ export default function App() {
       </View>
     );
   };
+
+  if (showReviewModal) {
+    const currentItem = feed.find(item => item.id === showReviewModal);
+    return (
+      <Modal visible={true} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.reviewModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Write a Review</Text>
+              <TouchableOpacity onPress={() => setShowReviewModal(null)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {currentItem && (
+              <Text style={styles.reviewItemTitle}>{currentItem.title}</Text>
+            )}
+
+            <View style={styles.ratingContainer}>
+              <Text style={styles.ratingLabel}>Rating</Text>
+              <View style={styles.starsContainer}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
+                    <Text style={styles.starIcon}>
+                      {star <= reviewRating ? '⭐' : '☆'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Share your thoughts..."
+              placeholderTextColor={tokens.textMuted}
+              multiline
+              numberOfLines={4}
+              value={reviewText}
+              onChangeText={setReviewText}
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={[styles.primaryCta, submittingReview && styles.ctaDisabled]}
+              onPress={handleSubmitReview}
+              disabled={submittingReview}
+            >
+              {submittingReview ? (
+                <ActivityIndicator color={tokens.textPrimary} />
+              ) : (
+                <Text style={styles.primaryCtaText}>Submit Review</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   if (watchingFull) {
     const fullVideoSrc = `https://player.vimeo.com/video/${watchingFull}?autoplay=1&title=0&byline=0&portrait=0`;
@@ -399,21 +595,23 @@ const styles = StyleSheet.create({
   genreRow: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
-    columnGap: 12
+    paddingBottom: 16,
+    columnGap: 10
   },
   genrePill: {
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: tokens.borderDefault,
-    paddingVertical: 6,
-    paddingHorizontal: 16
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    backgroundColor: 'rgba(15,18,26,0.4)'
   },
   genrePillActive: {
     borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    backgroundColor: tokens.accentMagenta
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    backgroundColor: tokens.accentMagenta,
+    borderWidth: 0
   },
   genrePillText: {
     color: tokens.textSecondary,
@@ -432,9 +630,41 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'flex-end'
   },
+  engagementBar: {
+    position: 'absolute',
+    right: 12,
+    bottom: '35%',
+    alignItems: 'center',
+    gap: 24,
+    zIndex: 10
+  },
+  engagementButton: {
+    alignItems: 'center',
+    gap: 6
+  },
+  iconContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 28,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  engagementIcon: {
+    fontSize: 28
+  },
+  engagementCount: {
+    color: tokens.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
+  },
   videoOverlay: {
     padding: 24,
     paddingBottom: 60,
+    paddingRight: 80,
     backgroundColor: 'rgba(15,18,26,0.75)'
   },
   genre: {
@@ -478,5 +708,74 @@ const styles = StyleSheet.create({
   secondaryCtaText: {
     color: tokens.textPrimary,
     fontWeight: '600'
+  },
+  authToggle: {
+    marginTop: 12
+  },
+  authToggleText: {
+    color: tokens.accentCyan,
+    textAlign: 'center',
+    fontWeight: '600'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end'
+  },
+  reviewModal: {
+    backgroundColor: tokens.backgroundSecondary,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16
+  },
+  modalTitle: {
+    color: tokens.textPrimary,
+    fontSize: 20,
+    fontWeight: '700'
+  },
+  modalClose: {
+    color: tokens.textSecondary,
+    fontSize: 28,
+    fontWeight: '300'
+  },
+  reviewItemTitle: {
+    color: tokens.textSecondary,
+    fontSize: 14,
+    marginBottom: 20
+  },
+  ratingContainer: {
+    marginBottom: 20
+  },
+  ratingLabel: {
+    color: tokens.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  starIcon: {
+    fontSize: 36
+  },
+  reviewInput: {
+    backgroundColor: tokens.backgroundPrimary,
+    color: tokens.textPrimary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    minHeight: 120,
+    fontSize: 16
+  },
+  ctaDisabled: {
+    opacity: 0.6
   }
 });

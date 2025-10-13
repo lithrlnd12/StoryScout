@@ -1,5 +1,7 @@
 type EnvSource = Record<string, unknown>;
 
+declare const process: any;
+
 function getGlobalSource(): EnvSource | undefined {
   if (typeof globalThis !== 'undefined') {
     const candidate = (globalThis as any).__STORY_SCOUT_ENV__;
@@ -11,8 +13,12 @@ function getGlobalSource(): EnvSource | undefined {
 }
 
 function getProcessSource(): EnvSource | undefined {
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env as EnvSource;
+  try {
+    if (typeof process !== 'undefined' && process?.env) {
+      return process.env as EnvSource;
+    }
+  } catch {
+    // process not available in this environment
   }
   return undefined;
 }
