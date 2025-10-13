@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+    <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+
+    <interface>
+        <field id="contentData" type="array" />
+    </interface>
+
+    <children>
+        <!-- Background -->
+        <Rectangle id="bg" width="1920" height="1080" color="#0F121A" />
+
+        <!-- Video Player -->
+        <Video
+            id="videoPlayer"
+            translation="[0, 0]"
+            width="1920"
+            height="1080"
+            loop="true"
+            visible="false" />
+
+        <!-- Genre Filter Row (Top) - Title Safe Zone Compliant -->
+        <Rectangle
+            id="genreRowBg"
+            translation="[0, 106]"
+            width="1920"
+            height="70"
+            color="#0F121A"
+            opacity="0.95"
+            visible="true" />
+
+        <!-- Genre Pills Container - Title Safe (192px from left) -->
+        <LayoutGroup
+            id="genreRow"
+            translation="[200, 118]"
+            layoutDirection="horiz"
+            itemSpacings="[20]"
+            visible="true" />
+
+        <!-- Bottom Info Card - Title Safe Zone Compliant -->
+        <Group id="bottomCard" translation="[200, 850]">
+            <!-- Pink Accent Line -->
+            <Rectangle
+                id="accentLine"
+                translation="[0, 0]"
+                width="6"
+                height="180"
+                color="#E91E63" />
+
+            <!-- Card Background - Solid for readability -->
+            <Rectangle
+                id="overlayBg"
+                translation="[0, 0]"
+                width="700"
+                height="180"
+                color="#0F121A"
+                opacity="0.95" />
+
+            <!-- Genre Chip (Small Cyan Badge) -->
+            <Group id="genreChip" translation="[20, 15]">
+                <Rectangle
+                    width="130"
+                    height="36"
+                    color="#00E5FF"
+                    opacity="0.2" />
+                <Label
+                    id="genreLabel"
+                    translation="[0, 8]"
+                    width="130"
+                    height="36"
+                    horizAlign="center"
+                    font="font:MediumSystemFont"
+                    color="#00E5FF" />
+            </Group>
+
+            <!-- Title Label (Large, Bold, 10-foot readable) -->
+            <Label
+                id="titleLabel"
+                translation="[20, 60]"
+                width="660"
+                height="50"
+                font="font:LargeBoldSystemFont"
+                color="#FFFFFF"
+                wrap="false" />
+
+            <!-- Synopsis Label (Compact, 2 lines max) -->
+            <Label
+                id="synopsisLabel"
+                translation="[20, 120]"
+                width="660"
+                height="50"
+                font="font:MediumSystemFont"
+                color="#8B92A8"
+                wrap="true"
+                maxLines="2" />
+        </Group>
+
+        <!-- Right Action Bar - Action Safe Zone Compliant -->
+        <Group id="engagementBar" translation="[1680, 380]">
+            <!-- Like -->
+            <Group id="likeGroup" translation="[0, 0]">
+                <Label id="likeIcon" translation="[30, 0]" text="♥" font="font:LargeSystemFont" color="#FFFFFF" />
+                <Label id="likeCount" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" />
+            </Group>
+
+            <!-- Star Rating -->
+            <Group id="ratingGroup" translation="[0, 150]">
+                <Label id="ratingIcon" translation="[30, 0]" text="★" font="font:LargeSystemFont" color="#FFFFFF" />
+                <Label id="ratingText" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" text="Rate" />
+            </Group>
+
+            <!-- Share -->
+            <Group id="shareGroup" translation="[0, 300]">
+                <Label id="shareIcon" translation="[30, 0]" text="↗" font="font:LargeSystemFont" color="#FFFFFF" />
+                <Label id="shareCount" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" />
+            </Group>
+        </Group>
+
+        <!-- Navigation Hint (Bottom Right, Minimal) -->
+        <Label
+            id="navHint"
+            text="↑↓ Browse  •  ←→ Genres  •  OK = Watch  •  * = Rate"
+            translation="[1380, 1030]"
+            width="460"
+            height="30"
+            horizAlign="right"
+            font="font:SmallSystemFont"
+            color="#8B92A8"
+            opacity="0.7" />
+
+        <!-- Loading Status -->
+        <Label
+            id="statusLabel"
+            text="Loading..."
+            translation="[600, 500]"
+            width="720"
+            height="80"
+            horizAlign="center"
+            font="font:LargeBoldSystemFont"
+            color="#FFFFFF" />
+    </children>
+</component>

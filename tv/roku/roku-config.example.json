@@ -1,0 +1,17 @@
+{
+  "comment": "Copy this file to roku-config.json (gitignored) and add your actual credentials",
+  "rokuIp": "192.168.x.x",
+  "username": "rokudev",
+  "password": "your-developer-password-here",
+  "notes": [
+    "To enable Developer Mode:",
+    "1. Press Home button 3 times",
+    "2. Press Up 2 times",
+    "3. Press Right, Left, Right, Left, Right",
+    "4. Set a developer password (remember this!)",
+    "5. Roku will reboot",
+    "",
+    "To find your Roku IP:",
+    "Settings → Network → About"
+  ]
+}

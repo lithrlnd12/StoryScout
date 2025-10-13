@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="FeedView" extends="Group">
+    <script type="text/brightscript" uri="pkg:/components/FeedView.brs" />
+
+    <children>
+        <!-- Current Video Player -->
+        <Video
+            id="videoPlayer"
+            translation="[0, 0]"
+            width="1920"
+            height="1080"
+            loop="true"
+            mute="true"
+            enableUI="false" />
+
+        <!-- Video Overlay (bottom) -->
+        <Rectangle
+            id="overlayBackground"
+            translation="[0, 800]"
+            width="1920"
+            height="280"
+            color="#0F121A"
+            opacity="0.85" />
+
+        <!-- Genre Label -->
+        <Label
+            id="genreLabel"
+            translation="[80, 820]"
+            width="300"
+            height="40"
+            font="font:MediumSystemFont"
+            color="#00E5FF" />
+
+        <!-- Title Label -->
+        <Label
+            id="titleLabel"
+            translation="[80, 870]"
+            width="1200"
+            height="60"
+            font="font:LargeBoldSystemFont"
+            color="#FFFFFF" />
+
+        <!-- Synopsis Label -->
+        <Label
+            id="synopsisLabel"
+            translation="[80, 940]"
+            width="1200"
+            height="80"
+            font="font:SmallSystemFont"
+            color="#8B92A8"
+            wrap="true" />
+
+        <!-- Watch Now Button -->
+        <Rectangle
+            id="watchButton"
+            translation="[80, 1000]"
+            width="200"
+            height="50"
+            color="#E91E63" />
+
+        <Label
+            id="watchButtonText"
+            translation="[120, 1012]"
+            text="Watch Now"
+            font="font:MediumBoldSystemFont"
+            color="#FFFFFF" />
+
+        <!-- Engagement Bar (right side) -->
+        <Group id="engagementBar" translation="[1750, 750]">
+            <!-- Like Icon/Count -->
+            <Label
+                id="likeIcon"
+                translation="[0, 0]"
+                text="♥"
+                font="font:LargeSystemFont"
+                color="#FFFFFF" />
+            <Label
+                id="likeCount"
+                translation="[0, 50]"
+                width="100"
+                horizAlign="center"
+                font="font:SmallSystemFont"
+                color="#FFFFFF" />
+
+            <!-- Review Icon/Count -->
+            <Label
+                id="reviewIcon"
+                translation="[0, 120]"
+                text="💬"
+                font="font:LargeSystemFont"
+                color="#FFFFFF" />
+            <Label
+                id="reviewCount"
+                translation="[0, 170]"
+                width="100"
+                horizAlign="center"
+                font="font:SmallSystemFont"
+                color="#FFFFFF" />
+
+            <!-- Share Icon/Count -->
+            <Label
+                id="shareIcon"
+                translation="[0, 240]"
+                text="↗"
+                font="font:LargeSystemFont"
+                color="#FFFFFF" />
+            <Label
+                id="shareCount"
+                translation="[0, 290]"
+                width="100"
+                horizAlign="center"
+                font="font:SmallSystemFont"
+                color="#FFFFFF" />
+        </Group>
+
+        <!-- Navigation Hint -->
+        <Label
+            id="navHint"
+            translation="[760, 50]"
+            text="↑↓ Browse  •  OK = Watch Full"
+            width="400"
+            height="40"
+            horizAlign="center"
+            font="font:SmallSystemFont"
+            color="#8B92A8" />
+    </children>
+
+    <interface>
+        <field id="currentIndex" type="integer" value="0" />
+    </interface>
+</component>

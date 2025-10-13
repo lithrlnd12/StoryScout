@@ -10,3 +10,12 @@ npm-debug.log*
 yarn-error.log*
 
 # Service account keys should live in local/ and stay untracked
+service-account.json
+**/service-account*.json
+
+# Roku development credentials (never commit these)
+# Store your Roku IP and password locally, not in repo
+roku-config.json
+**/roku-config.json
+# But allow the example template
+!**/roku-config.example.json

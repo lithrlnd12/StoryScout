@@ -1,0 +1,19 @@
+##   Channel Details
+title=Story Scout
+subtitle=Discover Short Films & Trailers
+major_version=0
+minor_version=1
+build_version=3
+
+##   Channel Assets
+mm_icon_focus_hd=pkg:/images/channel-poster_hd.png
+mm_icon_focus_sd=pkg:/images/channel-poster_sd.png
+
+##   Splash Screen + Loading Screen Artwork
+splash_screen_hd=pkg:/images/splash-screen_hd.png
+splash_screen_sd=pkg:/images/splash-screen_sd.png
+splash_color=#0F121A
+splash_min_time=1000
+
+##   Resolution / UI Resolutions
+ui_resolutions=fhd

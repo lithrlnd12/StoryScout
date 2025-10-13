@@ -5,6 +5,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
 [![Firebase](https://img.shields.io/badge/backend-Firebase-orange.svg)](https://firebase.google.com)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%20|%20Android%20|%20Web%20|%20Roku-brightgreen.svg)](#)
 
 ## 📚 Table of Contents
 - [Quick Start](#quick-start)
@@ -63,19 +64,34 @@ npm run dev
 
 > **Note:** Mobile app must be run from the root directory using `npm start --workspace=mobile` due to npm workspace structure, or use `npm start` from within the mobile directory after the workspace scripts have been updated.
 
-## Project Structure
-- docs/ - Product requirements and design references.
-- mobile/ - React Native (Expo) client targeting iOS and Android.
-- web/ - React + Vite client for responsive desktop/web.
-- tv/roku - Roku SceneGraph client.
-- tv/firetv - Android TV client targeting Fire TV devices.
-- shared/ - Design tokens, mocked data, and utilities consumed across platforms.
+## 📁 Project Structure
+```
+storyscout/
+├── docs/                   # Product requirements and design references
+├── mobile/                 # React Native (Expo) - iOS & Android
+├── web/                    # React + Vite - Responsive web app
+├── tv/
+│   ├── roku/              # ✅ Roku TV app (BrightScript/SceneGraph)
+│   └── firetv/            # 🔄 Fire TV app (Android TV) - Coming soon
+├── shared/                 # Design tokens, mocks, Firebase utilities
+└── node_modules/           # Shared dependencies (npm workspaces)
+```
 
-## Platform Stack
-- Backend & Services: Firebase (Auth, Firestore, Cloud Storage, Cloud Functions) deployed via Google Cloud.
-- Mobile: Expo-managed React Native app with Firebase SDK integration.
-- Web: Vite + React single-page app hosted via Firebase Hosting or Cloud Run.
-- Streaming: Roku SceneGraph and Fire TV (Android TV) apps consuming shared services and tokens.
+## 🎯 Platform Stack
+
+### Supported Platforms
+- **iOS** - React Native via Expo Go (no build required)
+- **Android** - React Native via Expo Go (no build required)
+- **Web** - Responsive React + Vite SPA
+- **Roku TV** - BrightScript/SceneGraph native app
+- **Fire TV** - Coming soon (Android TV)
+
+### Technology Stack
+- **Backend**: Firebase (Auth, Firestore, Storage, Functions)
+- **Mobile**: Expo-managed React Native with Firebase SDK
+- **Web**: Vite + React SPA hosted on Firebase Hosting
+- **TV**: Roku SceneGraph (BrightScript), Fire TV (Android)
+- **Content**: Internet Archive (51 public domain films)
 
 ## 🎯 Platform Commands
 
@@ -95,12 +111,29 @@ npm run android        # Build and run on Android device/emulator
 npm run ios            # Build and run on iOS simulator (macOS + Xcode required)
 ```
 
-###Web
+### Web
 ```bash
 cd web
 npm run dev            # Start Vite dev server (http://localhost:5173)
 npm run build          # Production build
 npm run preview        # Preview production build
+```
+
+### Roku TV
+```bash
+cd tv/roku
+
+# Build package
+python3 -m zipfile -c StoryScout.zip components/ images/ manifest source/
+
+# Deploy to Roku device
+# 1. Enable Developer Mode on Roku (Home 3x, Up 2x, Right, Left, Right, Left, Right)
+# 2. Find Roku IP: Settings → Network → About
+# 3. Open browser: http://<your-roku-ip>
+# 4. Login: username 'rokudev' + your developer password
+# 5. Upload StoryScout.zip under "Development Application Installer"
+
+# See tv/roku/README.md for detailed step-by-step instructions
 ```
 
 ### Data Management
@@ -152,7 +185,7 @@ VITE_FIREBASE_PROJECT_ID=story-scout
 ## 🏗️ Architecture
 
 ## Firebase & Google Cloud
-- CLI authenticated as lithrlnd@gmail.com; default project is 'story-scout'.
+- Default project: 'story-scout'
 - Enabled core services: Firestore, Authentication, Cloud Functions, Firebase Hosting, Storage, Firestore Rules.
 - Created platform apps via Firebase CLI:
   - Web: 1:148426129717:web:462a557ff1908c44ea0c7c
@@ -181,10 +214,13 @@ VITE_FIREBASE_PROJECT_ID=story-scout
 - **Auto-play Trailers**: Muted, looping videos in vertical feed; full videos with controls on demand
 - **Cross-Platform Compatible**: Direct video URLs work on mobile (iOS/Android), web, and TV platforms
 
-### Cross-Platform
+### Cross-Platform Features
 - **Mobile**: React Native (Expo) with iOS and Android support
 - **Web**: Responsive React + Vite app
-- **Shared**: Common Firebase backend and design tokens
+- **Roku TV**: Native BrightScript app with TV-optimized UI
+- **Shared Backend**: Common Firebase (Auth, Firestore) across all platforms
+- **Shared Content**: Same 51 Internet Archive films on all platforms
+- **Design Consistency**: Unified Story Scout branding (pink/cyan palette)
 
 ## Development Notes
 - Copy environment example files (.env.example, mobile/.env.example, web/.env.example) to real .env files before running apps.
@@ -296,9 +332,19 @@ See `CHANGELOG.md` for detailed schema documentation.
 ## 📖 Documentation
 
 - **[CHANGELOG.md](./CHANGELOG.md)** - Version history and recent changes
+- **[Roku TV README](./tv/roku/README.md)** - Complete Roku app setup and usage guide
 - **[Product Requirements](./docs/)** - PRD and design documents
 - **[GitHub Issues](../../issues)** - Bug reports and feature requests
 - **[Firebase Console](https://console.firebase.google.com/project/story-scout)** - Database and auth management
+
+### Platform-Specific Guides
+- **Mobile/Web**: See sections above for Expo Go and Vite setup
+- **Roku TV**: See [tv/roku/README.md](./tv/roku/README.md) for:
+  - Developer mode setup
+  - Package building and deployment
+  - Navigation controls reference
+  - UI design specifications
+  - Troubleshooting guide
 
 ## 🤝 Contributing
 

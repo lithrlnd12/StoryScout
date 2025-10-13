@@ -2,6 +2,115 @@
 
 ## [Unreleased] - 2025-10-13
 
+### Major Changes - Roku TV App Launch
+
+#### Added - Roku TV Application
+- **Complete Roku TV App** (`tv/roku/`)
+  - TikTok/YouTube Shorts-style vertical video feed for TV
+  - 51 curated films from Internet Archive (same as mobile/web)
+  - Full BrightScript/SceneGraph implementation
+  - Safe zone compliant UI (Title Safe & Action Safe zones)
+  - 10-foot viewing optimized with large fonts and proper spacing
+
+- **Feed Mode Navigation**
+  - ✅ Up/Down arrows - Browse through 51 films
+  - ✅ Left/Right arrows - Switch between 10 genre categories
+  - ✅ Genre filtering system with visual pills (All, Comedy, Horror, Sci-Fi, Action, Drama, Animation, Family, Mystery, Documentary)
+  - ✅ Auto-playing muted trailers with looping
+  - ✅ Dynamic genre pill highlighting (pink selected, gray unselected)
+
+- **Full-Screen Watch Mode**
+  - ✅ Press OK to enter immersive full-screen mode
+  - ✅ All UI elements hide automatically (pills, cards, engagement bar)
+  - ✅ Video plays unmuted with native Roku controls
+  - ✅ Playback controls: Play, Pause, Fast Forward (10s), Rewind (10s)
+  - ✅ Press Up/Down to toggle UI visibility without exiting
+  - ✅ Press OK or Back to return to feed mode
+  - ✅ Smart state management prevents accidental scrolling
+
+- **Star Rating System**
+  - ✅ Press * (asterisk) to open rating overlay
+  - ✅ Star icon (★) in engagement bar
+  - ✅ Placeholder implementation ("Star Rating Coming Soon!")
+  - ✅ Auto-dismiss after 2 seconds
+  - 🔄 Full 1-5 star rating UI (planned)
+
+- **UI Components** (`components/MainScene.xml`, `components/MainScene.brs`)
+  - Top genre bar: Safe zone compliant (Y=106, within title safe 192x106)
+  - Genre pills: 160x50px with proper centering and spacing
+  - Bottom info card: Compact 700x180px with pink accent line
+  - Genre chip: Cyan badge with film genre
+  - Title and synopsis: Truncated for readability
+  - Right engagement bar: Like (♥), Rate (★), Share (↗) with counts
+  - Navigation hints: Bottom right corner, subtle opacity
+
+- **Safe Zone Compliance**
+  - Title Safe Zone (FHD): 1534x866, offset (192, 106)
+  - Action Safe Zone (FHD): 1726x970, offset (96, 53)
+  - All text elements within title safe boundaries
+  - All interactive elements within action safe boundaries
+  - Follows Roku design guidelines for TV apps
+
+- **Color Palette**
+  - Background: #0F121A (Dark Navy)
+  - Primary Accent: #E91E63 (Pink/Magenta) - Brand color
+  - Secondary Accent: #00E5FF (Cyan) - Genre highlights
+  - Pill Selected: #E91E63 (Pink), opacity 1.0
+  - Pill Unselected: #1F2937 (Dark Gray), opacity 0.8
+  - Text: #FFFFFF (White), #8B92A8 (Gray), #D1D5DB (Light Gray)
+
+- **Developer Setup**
+  - Package building: `python3 -m zipfile -c StoryScout.zip components/ images/ manifest source/`
+  - Web-based deployment to Roku device via local network
+  - Developer mode installation instructions
+  - Comprehensive troubleshooting guide
+
+- **Branding Assets** (`tv/roku/images/`)
+  - Channel poster HD: 540x405 (Story Scout logo)
+  - Channel poster SD: 290x218
+  - Splash screen HD: 1280x720
+  - Splash screen SD: 720x480
+  - All using Story Scout branding (logo and colors)
+
+- **Documentation** (`tv/roku/README.md`)
+  - Complete setup guide
+  - Navigation control reference tables
+  - Testing checklist for all features
+  - Troubleshooting for video, installation, and UI issues
+  - UI design specifications with measurements
+  - Color palette reference
+  - Content source information
+  - Future enhancement roadmap
+
+#### Technical Implementation - Roku
+- **BrightScript State Management**
+  - `m.isFullScreen` - Tracks feed vs full-screen mode
+  - `m.isUIVisible` - Tracks UI visibility in full-screen
+  - `m.isMuted` - Global mute preference
+  - `m.currentIndex` - Current video position
+  - `m.selectedGenreIndex` - Current genre filter
+  - `m.filteredContent` - Genre-filtered video array
+
+- **Helper Functions**
+  - `enterFullScreen()` - Hide UI, enable controls, unmute
+  - `exitFullScreen()` - Show UI, disable controls, restore mute
+  - `toggleUIVisibility()` - Show/hide UI without exiting full-screen
+  - `hideAllUI()` / `showAllUI()` - Manage all UI elements
+  - `buildGenreList()` - Extract unique genres from content
+  - `buildGenrePills()` - Dynamically create genre pill UI
+  - `filterContentByGenre()` - Filter content by selected genre
+  - `updateGenrePills()` - Update pill colors on selection change
+  - `loadCurrentVideo()` - Load and play video with UI updates
+  - `openStarRating()` - Show rating placeholder (future: full UI)
+
+- **Video Player Integration**
+  - SceneGraph Video component with ContentNode
+  - Direct MP4 playback from Internet Archive URLs
+  - Auto-play and looping in feed mode
+  - Full playback controls in full-screen mode
+  - Mute/unmute state management
+  - Video state observation for error handling
+
 ### Major Changes - Mobile App Improvements & Content Expansion
 
 #### Fixed - Mobile App Layout & UX
