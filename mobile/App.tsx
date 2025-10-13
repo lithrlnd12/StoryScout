@@ -9,17 +9,17 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  ImageBackground,
   ScrollView,
   Modal,
   Share
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { WebView } from 'react-native-webview';
+import { Video, ResizeMode } from 'expo-av';
+import type { AVPlaybackStatus } from 'expo-av';
 
 import tokens from '../shared/tokens/colors.json';
-import trailers from '../shared/mocks/trailers.json';
+import archiveContent from '../shared/mocks/archive-content.json';
 import {
   subscribeToPublicContent,
   toggleLike,
@@ -38,31 +38,31 @@ import {
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-const fallbackFeed: TrailerDoc[] = (trailers as any[]).map((item: any) => ({
+const fallbackFeed: TrailerDoc[] = (archiveContent as any[]).map((item: any) => ({
   id: item.id,
   title: item.title,
   genre: item.genre,
   synopsis: item.synopsis,
 
-  // Trailer (for feed) - uses same video as full content for now
-  trailerType: 'vimeo' as const,
-  trailerVideoId: item.vimeoId,
-  trailerDurationSeconds: item.durationSeconds,
+  // Trailer (for feed) - direct MP4 URL from Internet Archive
+  trailerType: 'direct' as const,
+  trailerVideoId: item.trailerVideoId, // Full URL to MP4
+  trailerDurationSeconds: item.trailerDurationSeconds,
 
   // Full content (for Watch Now)
-  fullContentType: 'vimeo' as const,
-  fullContentVideoId: item.vimeoId,
-  fullContentDurationSeconds: item.durationSeconds,
+  fullContentType: 'direct' as const,
+  fullContentVideoId: item.fullContentVideoId,
+  fullContentDurationSeconds: item.fullContentDurationSeconds,
 
   thumbnailUrl: item.thumbnailUrl ?? '',
   likes: item.likes ?? 0,
   shares: item.shares ?? 0,
   reviews: item.reviews ?? 0,
-  averageRating: item.averageRating ?? 0,
-  vimeoId: item.vimeoId,
-  vimeoCategories: item.vimeoCategories,
-  durationSeconds: item.durationSeconds
+  averageRating: item.averageRating ?? 0
 }));
+
+console.log('📦 Loaded fallback feed:', fallbackFeed.length, 'items');
+console.log('🎬 First video URL:', fallbackFeed[0]?.trailerVideoId);
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ITEM_HEIGHT = SCREEN_HEIGHT;
@@ -96,7 +96,9 @@ export default function App() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [isGloballyMuted, setIsGloballyMuted] = useState(true);
   const listRef = useRef<FlatList<TrailerDoc>>(null);
+  const videoRefs = useRef<Record<string, Video | null>>({});
 
   useEffect(() => {
     const prepare = async () => {
@@ -160,6 +162,22 @@ export default function App() {
       if (index >= 0) {
         setCurrentIndex(index);
       }
+
+      // Play the visible video, pause all others
+      Object.keys(videoRefs.current).forEach(async (videoId) => {
+        const videoRef = videoRefs.current[videoId];
+        if (videoRef) {
+          try {
+            if (videoId === activeId) {
+              await videoRef.playAsync();
+            } else {
+              await videoRef.pauseAsync();
+            }
+          } catch (error) {
+            // Ignore video control errors
+          }
+        }
+      });
     }
   }, [filteredFeed]);
 
@@ -190,9 +208,9 @@ export default function App() {
   };
 
   const handleWatchFull = (item: TrailerDoc) => {
-    const videoId = item.fullContentVideoId || item.vimeoId;
-    if (!videoId) return;
-    setWatchingFull(videoId);
+    const videoUrl = item.fullContentVideoId;
+    if (!videoUrl) return;
+    setWatchingFull(videoUrl);
   };
 
   const handleSave = () => {
@@ -243,7 +261,25 @@ export default function App() {
     }
   };
 
+  const toggleMute = () => {
+    setIsGloballyMuted(prev => {
+      const newMutedState = !prev;
+      // Update all video refs to match new muted state
+      Object.values(videoRefs.current).forEach(video => {
+        if (video) {
+          video.setIsMutedAsync(newMutedState);
+        }
+      });
+      return newMutedState;
+    });
+  };
+
   const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + '...';
+  };
+
+  const truncateTitle = (text: string, maxLength: number = 40) => {
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
   };
@@ -316,20 +352,48 @@ export default function App() {
     );
   }
 
-  const renderItem = ({ item }: { item: TrailerDoc }) => {
+  const renderItem = ({ item, index }: { item: TrailerDoc; index: number }) => {
     const isExpanded = expandedSynopsis[item.id];
-    const synopsisText = isExpanded ? item.synopsis : truncateText(item.synopsis, 100);
+    const synopsisText = isExpanded ? item.synopsis : truncateText(item.synopsis, 60);
+    const titleText = truncateTitle(item.title);
     const isLiked = likedItems[item.id] || false;
+    const videoUrl = item.trailerVideoId; // Direct MP4 URL from Internet Archive
+    const isActive = index === currentIndex;
+
+    if (index === 0) {
+      console.log('🎥 Rendering first video:', videoUrl, 'isActive:', isActive);
+    }
 
     return (
       <View style={styles.cardContainer}>
-        <ImageBackground
-          source={{ uri: item.thumbnailUrl }}
-          style={styles.thumbnail}
-          resizeMode="cover"
+        <Video
+          ref={(ref) => {
+            if (ref) {
+              videoRefs.current[item.id] = ref;
+            }
+          }}
+          source={{ uri: videoUrl }}
+          style={styles.video}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={isActive}
+          isLooping
+          isMuted={isGloballyMuted}
+          useNativeControls={false}
+          posterSource={{ uri: item.thumbnailUrl }}
+          usePoster
+        />
+
+        {/* Mute/Unmute button */}
+        <TouchableOpacity
+          onPress={toggleMute}
+          style={styles.muteButton}
+          activeOpacity={0.7}
         >
-          {/* TikTok-style engagement bar */}
-          <View style={styles.engagementBar}>
+          <Text style={{ fontSize: 24 }}>{isGloballyMuted ? '🔇' : '🔊'}</Text>
+        </TouchableOpacity>
+
+        {/* TikTok-style engagement bar */}
+        <View style={styles.engagementBar}>
             {/* Like button */}
             <TouchableOpacity
               style={styles.engagementButton}
@@ -377,10 +441,10 @@ export default function App() {
 
           <View style={styles.videoOverlay}>
             <Text style={styles.genre}>{item.genre}</Text>
-            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.title}>{titleText}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <Text style={styles.synopsis}>{synopsisText}</Text>
-              {item.synopsis.length > 100 && (
+              {item.synopsis.length > 60 && (
                 <TouchableOpacity onPress={() => setExpandedSynopsis({ ...expandedSynopsis, [item.id]: !isExpanded })}>
                   <Text style={[styles.synopsis, { fontWeight: '700', marginLeft: 4 }]}>
                     {isExpanded ? 'less' : 'more'}
@@ -397,7 +461,6 @@ export default function App() {
               </TouchableOpacity>
             </View>
           </View>
-        </ImageBackground>
       </View>
     );
   };
@@ -461,7 +524,6 @@ export default function App() {
   }
 
   if (watchingFull) {
-    const fullVideoSrc = `https://player.vimeo.com/video/${watchingFull}?autoplay=1&title=0&byline=0&portrait=0`;
     return (
       <Modal visible={true} animationType="slide">
         <SafeAreaView style={{ flex: 1, backgroundColor: tokens.backgroundPrimary }}>
@@ -483,11 +545,13 @@ export default function App() {
           >
             <Text style={{ color: tokens.textPrimary, fontSize: 24 }}>←</Text>
           </TouchableOpacity>
-          <WebView
-            source={{ uri: fullVideoSrc }}
+          <Video
+            source={{ uri: watchingFull }}
             style={{ flex: 1 }}
-            allowsFullscreenVideo
-            mediaPlaybackRequiresUserAction={false}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            useNativeControls
+            isMuted={false}
           />
         </SafeAreaView>
       </Modal>
@@ -523,7 +587,7 @@ export default function App() {
       <FlatList
         ref={listRef}
         data={filteredFeed}
-        renderItem={renderItem}
+        renderItem={({ item, index }) => renderItem({ item, index })}
         keyExtractor={item => item.id}
         pagingEnabled
         snapToInterval={ITEM_HEIGHT}
@@ -594,48 +658,61 @@ const styles = StyleSheet.create({
   },
   genreRow: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 16,
-    columnGap: 10
+    columnGap: 10,
+    alignItems: 'center'
   },
   genrePill: {
     borderRadius: 999,
     borderWidth: 1.5,
     borderColor: tokens.borderDefault,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    backgroundColor: 'rgba(15,18,26,0.4)'
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(50,55,70,0.8)',
+    minWidth: 80,
+    height: 40,
+    justifyContent: 'center'
   },
   genrePillActive: {
     borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     backgroundColor: tokens.accentMagenta,
-    borderWidth: 0
+    borderWidth: 0,
+    minWidth: 80,
+    height: 40,
+    justifyContent: 'center'
   },
   genrePillText: {
-    color: tokens.textSecondary,
-    fontWeight: '500'
+    color: tokens.textPrimary,
+    fontWeight: '500',
+    textAlign: 'center'
   },
   genrePillTextActive: {
     color: tokens.textPrimary,
-    fontWeight: '600'
+    fontWeight: '600',
+    textAlign: 'center'
   },
   cardContainer: {
     height: ITEM_HEIGHT,
     width: '100%'
   },
-  thumbnail: {
-    flex: 1,
+  video: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
-    justifyContent: 'flex-end'
+    height: '100%'
   },
   engagementBar: {
     position: 'absolute',
     right: 12,
-    bottom: '35%',
+    bottom: '25%',
     alignItems: 'center',
-    gap: 24,
+    gap: 20,
     zIndex: 10
   },
   engagementButton: {
@@ -662,27 +739,34 @@ const styles = StyleSheet.create({
     textShadowRadius: 3
   },
   videoOverlay: {
-    padding: 24,
-    paddingBottom: 60,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    paddingBottom: 70,
     paddingRight: 80,
-    backgroundColor: 'rgba(15,18,26,0.75)'
+    backgroundColor: 'rgba(15,18,26,0.85)'
   },
   genre: {
     color: tokens.accentCyan,
-    marginBottom: 8,
-    fontWeight: '600'
+    marginBottom: 4,
+    fontWeight: '600',
+    fontSize: 12
   },
   title: {
     color: tokens.textPrimary,
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 4
+    marginBottom: 4,
+    lineHeight: 24
   },
   synopsis: {
     color: tokens.textSecondary,
-    marginTop: 8,
-    marginBottom: 12,
-    lineHeight: 20
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 18,
+    fontSize: 13
   },
   ctaRow: {
     flexDirection: 'row',
@@ -777,5 +861,17 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: {
     opacity: 0.6
+  },
+  muteButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
   }
 });

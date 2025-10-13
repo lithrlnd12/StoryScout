@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getFirebaseAnalytics } from '@shared/firebase/client';
+import { getFirebaseAnalytics } from './firebaseClient';
 import {
   subscribeToPublicContent,
   toggleLike,
@@ -8,42 +8,39 @@ import {
   getUserEngagement,
   submitReview,
   type TrailerDoc
-} from '@shared/firebase/firestore';
+} from './firebaseFirestore';
 import {
   subscribeToAuthChanges,
   signInWithEmail,
   signUpWithEmail,
   signOutFirebase,
   type User
-} from '@shared/firebase/auth';
+} from './firebaseAuth';
 import tokens from '@tokens/colors.json';
-import mockData from '@mocks/trailers.json';
+import archiveContent from '@mocks/archive-content.json';
 
 const gradients = tokens.accentGradient as string[];
-const fallbackFeed: TrailerDoc[] = (mockData as any[]).map((item: any) => ({
+const fallbackFeed: TrailerDoc[] = (archiveContent as any[]).map((item: any) => ({
   id: item.id,
   title: item.title,
   genre: item.genre,
   synopsis: item.synopsis,
 
-  // Trailer (for feed) - uses same video as full content for now
-  trailerType: 'vimeo' as const,
-  trailerVideoId: item.vimeoId,
-  trailerDurationSeconds: item.durationSeconds,
+  // Direct MP4 URL from Internet Archive
+  trailerType: 'direct' as const,
+  trailerVideoId: item.trailerVideoId, // Full URL to MP4
+  trailerDurationSeconds: item.trailerDurationSeconds,
 
   // Full content (for Watch Now)
-  fullContentType: 'vimeo' as const,
-  fullContentVideoId: item.vimeoId,
-  fullContentDurationSeconds: item.durationSeconds,
+  fullContentType: 'direct' as const,
+  fullContentVideoId: item.fullContentVideoId,
+  fullContentDurationSeconds: item.fullContentDurationSeconds,
 
   thumbnailUrl: item.thumbnailUrl ?? '',
   likes: item.likes ?? 0,
   shares: item.shares ?? 0,
   reviews: item.reviews ?? 0,
-  averageRating: item.averageRating ?? 0,
-  vimeoId: item.vimeoId,
-  vimeoCategories: item.vimeoCategories,
-  durationSeconds: item.durationSeconds
+  averageRating: item.averageRating ?? 0
 }));
 
 type AuthMode = 'signin' | 'signup';
@@ -66,7 +63,10 @@ export default function App() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [isGloballyMuted, setIsGloballyMuted] = useState(true); // Global mute state
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
     getFirebaseAnalytics().catch(() => undefined);
@@ -117,13 +117,36 @@ export default function App() {
 
   const goToIndex = useCallback(
     (nextIndex: number) => {
-      const clamped = Math.max(0, Math.min(filteredTrailers.length - 1, nextIndex));
-      if (clamped === currentIndex) return;
+      // Loop infinitely: wrap around when reaching the end or beginning
+      let newIndex = nextIndex;
+      if (nextIndex >= filteredTrailers.length) {
+        newIndex = 0; // Loop to beginning
+      } else if (nextIndex < 0) {
+        newIndex = filteredTrailers.length - 1; // Loop to end
+      }
+
+      if (newIndex === currentIndex) return;
       setTransitioning(true);
-      setCurrentIndex(clamped);
-      setTimeout(() => setTransitioning(false), 400);
+      setCurrentIndex(newIndex);
+      setTimeout(() => setTransitioning(false), 300); // Faster transition
+
+      // Play/pause videos based on active index
+      filteredTrailers.forEach((trailer, idx) => {
+        const video = videoRefs.current[trailer.id];
+        if (video) {
+          if (idx === newIndex) {
+            video.play().catch(() => {
+              // Autoplay might be blocked, user needs to interact first
+              console.log('Autoplay blocked for:', trailer.title);
+            });
+          } else {
+            video.pause();
+            video.currentTime = 0; // Reset video to start
+          }
+        }
+      });
     },
-    [currentIndex, filteredTrailers.length]
+    [currentIndex, filteredTrailers]
   );
 
   useEffect(() => {
@@ -132,10 +155,10 @@ export default function App() {
 
     const handleWheel = (event: WheelEvent) => {
       if (transitioning) return;
-      if (event.deltaY > 40) {
+      if (event.deltaY > 20) { // More sensitive
         event.preventDefault();
         goToIndex(currentIndex + 1);
-      } else if (event.deltaY < -40) {
+      } else if (event.deltaY < -20) {
         event.preventDefault();
         goToIndex(currentIndex - 1);
       }
@@ -226,6 +249,19 @@ export default function App() {
     setReviewText('');
   };
 
+  const toggleMute = () => {
+    setIsGloballyMuted(prev => {
+      const newMutedState = !prev;
+      // Update all video refs to match new muted state
+      Object.values(videoRefs.current).forEach(video => {
+        if (video) {
+          video.muted = newMutedState;
+        }
+      });
+      return newMutedState;
+    });
+  };
+
   const handleSubmitReview = async () => {
     if (!user || !showReviewModal) return;
     setSubmittingReview(true);
@@ -263,15 +299,9 @@ export default function App() {
 
   const renderCard = (trailer: TrailerDoc, index: number) => {
     const isActive = index === currentIndex;
-    const autoplay = isActive ? '1' : '0';
 
-    // Use trailer video for feed
-    const trailerVideoId = trailer.trailerVideoId || trailer.vimeoId;
-    const iframeSrc = trailer.trailerUrl || (
-      trailerVideoId
-        ? 'https://player.vimeo.com/video/' + trailerVideoId + '?autoplay=' + autoplay + '&muted=1&loop=1&title=0&byline=0&portrait=0'
-        : ''
-    );
+    // Use direct MP4 URL from Internet Archive
+    const videoUrl = trailer.trailerVideoId;
     const transform = 'translateY(' + (index - currentIndex) * 100 + 'vh)';
     const isExpanded = expandedSynopsis[trailer.id];
     const synopsisText = isExpanded ? trailer.synopsis : truncateText(trailer.synopsis, 100);
@@ -289,18 +319,37 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'transform 0.35s ease-out',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
           transform
         }}
       >
         <div style={cardStyle}>
           <div style={videoShellStyle}>
-            {iframeSrc ? (
-              <iframe
-                src={iframeSrc}
-                allow="autoplay; fullscreen"
+            {videoUrl ? (
+              <video
+                ref={(el) => {
+                  if (el) videoRefs.current[trailer.id] = el;
+                }}
+                src={videoUrl}
+                muted={isGloballyMuted}
+                loop
+                playsInline
                 style={iframeStyle}
-                title={trailer.title}
+                poster={trailer.thumbnailUrl}
+                onLoadStart={() => console.log('🎬 Video loading:', trailer.title)}
+                onLoadedData={() => {
+                  console.log('✅ Video loaded:', trailer.title);
+                  // Try to play if this is the active video
+                  if (isActive) {
+                    const video = videoRefs.current[trailer.id];
+                    if (video) {
+                      video.play().catch((err) => {
+                        console.log('⚠️ Autoplay blocked, click to play:', err.message);
+                      });
+                    }
+                  }
+                }}
+                onError={(e) => console.error('❌ Video error:', trailer.title, e)}
               />
             ) : (
               <div
@@ -312,6 +361,16 @@ export default function App() {
                 }}
               />
             )}
+
+            {/* Mute/Unmute button */}
+            <button
+              onClick={toggleMute}
+              style={muteButtonStyle}
+              aria-label={isGloballyMuted ? 'Unmute' : 'Mute'}
+            >
+              <span style={{ fontSize: 24 }}>{isGloballyMuted ? '🔇' : '🔊'}</span>
+            </button>
+
             {/* TikTok-style engagement bar */}
             <div style={engagementBarStyle}>
               {/* Like button */}
@@ -372,7 +431,7 @@ export default function App() {
                 <div style={actionsRowStyle}>
                   <button
                     style={primaryButtonStyle}
-                    onClick={() => setWatchingFull(trailer.fullContentVideoId || trailer.vimeoId || '')}
+                    onClick={() => setWatchingFull(trailer.fullContentVideoId || '')}
                   >
                     Watch Now
                   </button>
@@ -439,7 +498,6 @@ export default function App() {
   }
 
   if (watchingFull) {
-    const fullVideoSrc = 'https://player.vimeo.com/video/' + watchingFull + '?autoplay=1&title=0&byline=0&portrait=0';
     return (
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: tokens.backgroundPrimary, zIndex: 9999 }}>
         <button
@@ -464,18 +522,18 @@ export default function App() {
         >
           ←
         </button>
-        <iframe
-          src={fullVideoSrc}
-          allow="autoplay; fullscreen; picture-in-picture"
+        <video
+          src={watchingFull}
+          autoPlay
+          controls
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             width: '100%',
             height: '100%',
-            border: 'none'
+            objectFit: 'contain'
           }}
-          title="Full Video Player"
         />
       </div>
     );
@@ -833,4 +891,22 @@ const reviewTextareaStyle: React.CSSProperties = {
   fontFamily: 'inherit',
   marginBottom: 20,
   resize: 'vertical'
+};
+
+const muteButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 20,
+  right: 20,
+  zIndex: 10,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  border: 'none',
+  borderRadius: '50%',
+  width: 44,
+  height: 44,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  transition: 'background-color 0.2s ease',
+  backdropFilter: 'blur(4px)'
 };

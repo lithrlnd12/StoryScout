@@ -4,25 +4,26 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "start": "node ../node_modules/expo/bin/cli start",
+    "android": "node ../node_modules/expo/bin/cli run:android",
+    "ios": "node ../node_modules/expo/bin/cli run:ios",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^1.21.0",
-    "expo": "^51.0.0",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "expo": "~51.0.0",
+    "expo-av": "~14.0.7",
     "expo-splash-screen": "~0.27.5",
     "expo-status-bar": "~1.12.0",
     "firebase": "^10.11.0",
     "react": "18.2.0",
-    "react-native": "0.74.0",
-    "react-native-webview": "^13.8.6"
+    "react-native": "0.74.5",
+    "react-native-webview": "13.8.6"
   },
   "devDependencies": {
-    "@types/react": "18.2.21",
+    "@types/react": "~18.2.79",
     "@types/react-native": "0.73.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.4.0"
+    "typescript": "~5.3.3"
   }
 }

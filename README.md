@@ -1,7 +1,67 @@
 
 # Story Scout
 
-Monorepo scaffolding for the Story Scout discovery platform. The repo is organized to support simultaneous delivery of mobile (Android/iOS), web, and streaming (Roku/Fire TV) apps from a shared design system and content schema.
+> A TikTok-style video discovery platform for short films and trailers across mobile, web, and TV platforms.
+
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
+[![Firebase](https://img.shields.io/badge/backend-Firebase-orange.svg)](https://firebase.google.com)
+
+## 📚 Table of Contents
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Platform Commands](#platform-commands)
+- [Environment Setup](#environment-setup)
+- [Architecture](#architecture)
+- [Database Schema](#database-schema)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Documentation](#documentation)
+
+## 🚀 Quick Start
+
+### 1. Clone and Install
+```bash
+git clone <repo-url>
+cd storyscout
+npm install  # Installs dependencies for all workspaces (mobile, web, shared)
+```
+
+### 2. Set Up Environment Variables
+```bash
+# Copy example files to create your .env files
+cp mobile/.env.example mobile/.env
+cp web/.env.example web/.env
+
+# Edit the .env files with your Firebase credentials
+# (See "Environment Variables" section below)
+```
+
+### 3. Fetch Content from Internet Archive
+```bash
+# Fetch 51 curated public domain films
+node web/fetch-archive-content.mjs
+
+# Upload content to Firestore (optional, requires service-account.json)
+node web/upload-archive-content.mjs
+```
+
+### 4. Run the Apps
+
+**Mobile (Expo Go - Works on both iOS and Android):**
+```bash
+cd mobile
+npm start
+# Scan QR code with Expo Go app on your phone
+```
+
+**Web (Vite dev server):**
+```bash
+cd web
+npm run dev
+# Open http://localhost:5173 in your browser
+```
+
+> **Note:** Mobile app must be run from the root directory using `npm start --workspace=mobile` due to npm workspace structure, or use `npm start` from within the mobile directory after the workspace scripts have been updated.
 
 ## Project Structure
 - docs/ - Product requirements and design references.
@@ -17,14 +77,79 @@ Monorepo scaffolding for the Story Scout discovery platform. The repo is organiz
 - Web: Vite + React single-page app hosted via Firebase Hosting or Cloud Run.
 - Streaming: Roku SceneGraph and Fire TV (Android TV) apps consuming shared services and tokens.
 
-## Getting Started (Next Steps)
-1. Install Node.js >= 18 and Yarn (Berry) to manage workspaces.
-2. Initialize Yarn workspaces with platform packages (to be generated in upcoming steps).
-3. Scaffold the Expo mobile app inside mobile/ and wire Firebase config.
-4. Scaffold the Vite React web app inside web/ and set up Firebase web SDK.
-5. Import shared design tokens and mocked feed data into each client to build the trailer feed shell.
+## 🎯 Platform Commands
 
-Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep this document updated as scaffolding progresses.
+### Mobile (iOS/Android)
+```bash
+cd mobile
+npm start              # Start Expo dev server (works with Expo Go)
+
+# For Expo Go (Recommended - No build required):
+# 1. Install "Expo Go" app from App Store (iOS) or Play Store (Android)
+# 2. Run 'npm start' from mobile directory
+# 3. Scan QR code with Expo Go app
+# 4. App loads instantly - no Xcode or Android Studio needed!
+
+# For native builds (Advanced - Only if you need custom native modules):
+npm run android        # Build and run on Android device/emulator
+npm run ios            # Build and run on iOS simulator (macOS + Xcode required)
+```
+
+###Web
+```bash
+cd web
+npm run dev            # Start Vite dev server (http://localhost:5173)
+npm run build          # Production build
+npm run preview        # Preview production build
+```
+
+### Data Management
+```bash
+# Fetch 51 curated films from Internet Archive
+node web/fetch-archive-content.mjs
+
+# Upload content to Firestore (requires Firebase service account)
+node web/upload-archive-content.mjs
+```
+
+### Firebase/Deployment
+```bash
+firebase deploy --only firestore:rules  # Deploy security rules
+firebase deploy --only hosting          # Deploy web app
+firebase deploy                          # Deploy everything
+```
+
+## 🔧 Environment Setup
+
+### Prerequisites
+- **Node.js** >= 20.19.x (Required for React Native)
+- **npm** (comes with Node.js)
+- **Firebase CLI** >= 14.x (for deployment)
+- **Expo Go app** on your phone (for mobile testing - free from App/Play Store)
+- **Android Studio** (optional, only for native Android builds)
+- **Xcode** (optional, only for native iOS builds, macOS only)
+
+### Environment Variables
+
+Create `.env` files from the examples:
+
+**mobile/.env:**
+```bash
+EXPO_PUBLIC_FIREBASE_API_KEY=your_api_key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=story-scout.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=story-scout
+# ... (see mobile/.env.example)
+```
+
+**web/.env:**
+```bash
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=story-scout.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=story-scout
+# ... (see web/.env.example)
+```
+
+## 🏗️ Architecture
 
 ## Firebase & Google Cloud
 - CLI authenticated as lithrlnd@gmail.com; default project is 'story-scout'.
@@ -47,11 +172,14 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 - **Review System**: 5-star ratings with text reviews
 - **Real-time Updates**: Engagement counts update live across all users
 - **Social Sharing**: Native share on mobile, Web Share API on desktop
+- **Audio Controls**: Global mute/unmute toggle - unmute once, all videos play with audio
 
 ### Content Architecture
-- **Flexible Video Sources**: Support for Vimeo, YouTube, Internet Archive, and external links
-- **Trailer + Full Content**: Separate trailer videos for feed and full-length content
-- **Auto-play Trailers**: Muted, looping trailers in feed; full videos on demand
+- **Internet Archive Integration**: Direct MP4 video files from Internet Archive's public domain collection
+- **No API Keys Required**: Free, open access to thousands of classic films and shorts
+- **Native Video Playback**: Uses expo-av Video component (works in Expo Go without native builds)
+- **Auto-play Trailers**: Muted, looping videos in vertical feed; full videos with controls on demand
+- **Cross-Platform Compatible**: Direct video URLs work on mobile (iOS/Android), web, and TV platforms
 
 ### Cross-Platform
 - **Mobile**: React Native (Expo) with iOS and Android support
@@ -64,11 +192,14 @@ Refer to docs/story-scout-mobile-mvp-prd.md for product scope and roadmap. Keep 
 - Expo Metro bundler is configured (mobile/metro.config.js) to watch the shared workspace; run yarn workspace story-scout-mobile start.
 - Use Firebase emulators for Firestore and Storage via firebase emulators:start --only firestore,storage (ports configured in firebase.json).
 
-### Vimeo Integration
-- Set VIMEO_CLIENT_ID in your env files; current project uses 2a69ae3d2f4d6b7db17b89b8e678d9e8f43422ba.
-- Set VIMEO_ACCESS_TOKEN (get from https://developer.vimeo.com/apps - requires a Vimeo account with "Public" and "Private" scopes).
-- To fetch real Vimeo content: deploy Cloud Function `syncVimeoContent` and call it via HTTP to populate Firestore with Creative Commons videos.
-- Massive library available through Vimeo Staff Picks and curated collections
+### Internet Archive Integration
+- **No API keys required**: Free, open access to thousands of classic films
+- **Direct MP4 playback**: Videos work natively on all platforms (mobile, web, TV)
+- **Curated collection**: 51 validated films across 9 genres (Comedy, Horror, Sci-Fi, Action, Drama, Animation, Family, Mystery, Documentary)
+- **Mix of content**: Classic public domain films (pre-1970) and modern indie/open source films (2005-2024)
+- **Fetch script**: Run `node web/fetch-archive-content.mjs` to refresh content from Internet Archive
+- **Collections used**: feature_films, opensource_movies, shortfilms
+- **Output**: Content saved to `shared/mocks/archive-content.json`
 
 ### Running Locally
 - Use Node >= 20.19.x to satisfy the React Native engine requirement.
@@ -113,3 +244,74 @@ User reviews with ratings:
 - Auto-calculates `averageRating` on `publicContent`
 
 See `CHANGELOG.md` for detailed schema documentation.
+
+## 🚨 Troubleshooting
+
+### Mobile Build Issues
+
+**"Cannot find module expo/bin/cli" Error**
+- This is due to npm workspaces hoisting dependencies to the root
+- **Solution 1**: Run from root: `npm start --workspace=mobile`
+- **Solution 2**: The mobile package.json has been updated with proper paths
+- **Solution 3**: Run `npm install` from the root directory to ensure all dependencies are installed
+
+**"import.meta is currently unsupported" (Hermes)**
+- This has been fixed in `shared/firebase/config.ts`
+- The code now uses indirect access to avoid Hermes parse errors
+- If you still see this, ensure you've pulled the latest changes
+
+**"Invalid resource field value in the request" (Firestore)**
+- Ensure you're authenticated (create account in app first)
+- Check Firestore security rules allow writes
+- Run `firebase deploy --only firestore:rules`
+
+**Expo Go vs Native Builds**
+- Use **Expo Go** for quick testing on both Android and iOS (no build required)
+- **Videos work fully in Expo Go**: Internet Archive direct MP4 files play with expo-av
+- Use **native builds** (`npm run android`) only if you need custom native modules
+- Expo Go now supports all core features including video playback
+
+### Web Issues
+
+**"Cannot find module @rollup/rollup-win32-x64-msvc"**
+- Delete `node_modules` and `yarn.lock`
+- Run `yarn install` from project root
+
+**Firebase connection errors**
+- Verify `.env` file exists in `web/` directory
+- Check that `VITE_FIREBASE_*` variables are set correctly
+
+### Common Issues
+
+**Videos not loading or showing errors**
+- Ensure you've fetched Internet Archive content: `node web/fetch-archive-content.mjs`
+- Check that `shared/mocks/archive-content.json` exists and contains data
+- All content is validated public domain - no private video issues
+
+**App shows mock data instead of Firestore data**
+- Create an account and sign in
+- App uses mock data when not authenticated
+- Verify Firestore has data: `firebase firestore:get publicContent`
+
+## 📖 Documentation
+
+- **[CHANGELOG.md](./CHANGELOG.md)** - Version history and recent changes
+- **[Product Requirements](./docs/)** - PRD and design documents
+- **[GitHub Issues](../../issues)** - Bug reports and feature requests
+- **[Firebase Console](https://console.firebase.google.com/project/story-scout)** - Database and auth management
+
+## 🤝 Contributing
+
+1. Create a feature branch from `main`
+2. Make your changes
+3. Test on both mobile and web
+4. Create a pull request
+5. Update CHANGELOG.md with your changes
+
+## 📝 License
+
+[Add your license here]
+
+---
+
+**Note:** This is a monorepo. Always run `yarn install` from the root to ensure all workspaces are properly linked.
