@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,7 @@ export default function WatchPartyComponent({
   onPartyStateChange,
   onWatchFullMovie
 }: WatchPartyProps) {
+  console.log('[WatchParty] Component rendered');
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -51,6 +52,20 @@ export default function WatchPartyComponent({
   const [party, setParty] = useState<WatchParty | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previousParticipantCount, setPreviousParticipantCount] = useState(0);
+  const [joinNotification, setJoinNotification] = useState<string | null>(null);
+
+  // Use refs to track state for subscription callback (avoid stale closures)
+  const showCreateModalRef = useRef(showCreateModal);
+  const onWatchFullMovieRef = useRef(onWatchFullMovie);
+
+  useEffect(() => {
+    showCreateModalRef.current = showCreateModal;
+  }, [showCreateModal]);
+
+  useEffect(() => {
+    onWatchFullMovieRef.current = onWatchFullMovie;
+  }, [onWatchFullMovie]);
 
   // Use external showMenu if provided, otherwise use internal state
   const showMenu = externalShowMenu !== undefined ? externalShowMenu : internalShowMenu;
@@ -60,27 +75,82 @@ export default function WatchPartyComponent({
 
   // Subscribe to party updates
   useEffect(() => {
-    if (!party) return;
+    if (!party) {
+      console.log('[WatchParty] No party to subscribe to');
+      return;
+    }
+
+    console.log('[WatchParty] Subscribing to party:', party.id, 'Current status:', party.status);
 
     const unsubscribe = subscribeToWatchParty(party.id, (updatedParty) => {
       if (!updatedParty) {
         // Party ended
+        console.log('[WatchParty] Party ended - no data received');
         setParty(null);
         setIsHost(false);
         onPartyStateChange?.(false);
         return;
       }
 
+      console.log('[WatchParty] Party updated! Status:', updatedParty.status, 'isHost:', isHost, 'showCreateModal:', showCreateModal);
+
+      // Notify host when someone joins
+      if (isHost && updatedParty.participants.length > previousParticipantCount) {
+        const newParticipant = updatedParty.participants[updatedParty.participants.length - 1];
+        setShowCreateModal(true);
+        setJoinNotification(`${newParticipant.displayName} joined!`);
+        setTimeout(() => setJoinNotification(null), 3000);
+      }
+      setPreviousParticipantCount(updatedParty.participants.length);
+
       setParty(updatedParty);
       syncVideoWithParty(updatedParty);
     });
 
     return unsubscribe;
-  }, [party?.id]);
+  }, [party?.id, isHost, previousParticipantCount]);
 
   // Sync video playback with party state
   const syncVideoWithParty = async (partyState: WatchParty) => {
-    if (!videoRef.current || isHost) return; // Host controls their own playback
+    const modalIsShowing = showCreateModalRef.current;
+    const callback = onWatchFullMovieRef.current;
+    console.log('[WatchParty] syncVideoWithParty called - status:', partyState.status, 'modalIsShowing:', modalIsShowing, 'videoUrl:', partyState.videoUrl);
+
+    // CRITICAL: Only navigate to full movie if status is 'playing' AND modal is currently showing
+    // This prevents automatic navigation when guest first joins (they should see lobby first)
+    if (partyState.status === 'playing' && partyState.videoUrl && callback && modalIsShowing) {
+      console.log('[WatchParty] ALL conditions met! Calling onWatchFullMovie with:', partyState.videoUrl);
+      setShowCreateModal(false);
+      callback(partyState.videoUrl);
+      return;
+    }
+
+    console.log('[WatchParty] Navigation conditions not met:', {
+      isPlaying: partyState.status === 'playing',
+      hasVideoUrl: !!partyState.videoUrl,
+      hasCallback: !!callback,
+      modalIsShowing: modalIsShowing
+    });
+
+    // If in lobby (waiting), pause the video for guests and ensure modal is visible
+    if (partyState.status === 'waiting' && !isHost && videoRef.current) {
+      try {
+        const status = await videoRef.current.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          await videoRef.current.pauseAsync();
+        }
+      } catch (err) {
+        console.error('Error pausing video:', err);
+      }
+      // Ensure lobby modal is visible for guests waiting
+      if (!showCreateModal) {
+        setShowCreateModal(true);
+      }
+      return;
+    }
+
+    // For ongoing playback sync (participants only)
+    if (isHost || !videoRef.current) return;
 
     try {
       const status = await videoRef.current.getStatusAsync();
@@ -105,9 +175,12 @@ export default function WatchPartyComponent({
     }
   };
 
-  // Host: Update party state every 5 seconds
+  // Host: Update party state every 5 seconds (ONLY when party is already playing)
   useEffect(() => {
     if (!party || !isHost || !videoRef.current) return;
+
+    // Don't update if still in lobby (status is 'waiting')
+    if (party.status === 'waiting') return;
 
     const interval = setInterval(async () => {
       try {
@@ -145,6 +218,7 @@ export default function WatchPartyComponent({
 
       setParty(newParty);
       setIsHost(true);
+      setPreviousParticipantCount(1); // Initialize with host count
       setShowCreateModal(true);
       setShowMenu(false);
       onPartyStateChange?.(true);
@@ -175,17 +249,14 @@ export default function WatchPartyComponent({
 
       setParty(joinedParty);
       setIsHost(false);
+      setPreviousParticipantCount(joinedParty.participants.length);
       setShowJoinModal(false);
       setShowMenu(false);
       setJoinCode('');
+      setShowCreateModal(true); // Show lobby for guests
       onPartyStateChange?.(true);
 
-      // Auto-start full movie
-      if (joinedParty.videoUrl && onWatchFullMovie) {
-        onWatchFullMovie(joinedParty.videoUrl);
-      }
-
-      Alert.alert('Success', `Joined party: ${joinedParty.contentTitle}`);
+      // Don't auto-start - guest stays in lobby modal and sees "Waiting for host..."
     } catch (err: any) {
       setError(err.message || 'Failed to join party');
       Alert.alert('Error', err.message || 'Failed to join party');
@@ -231,6 +302,25 @@ export default function WatchPartyComponent({
       });
     } catch (err) {
       console.error('Error sharing:', err);
+    }
+  };
+
+  const handleStartWatchParty = async () => {
+    if (!party || !isHost) return;
+
+    try {
+      // Start the full movie for everyone
+      await updateWatchPartyState(party.id, 'playing', 0);
+
+      // Navigate to full movie view
+      if (party.videoUrl && onWatchFullMovie) {
+        onWatchFullMovie(party.videoUrl);
+      }
+
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error('Error starting watch party:', err);
+      Alert.alert('Error', 'Failed to start watch party');
     }
   };
 
@@ -336,6 +426,13 @@ export default function WatchPartyComponent({
               <>
                 <Text style={styles.contentTitle}>{party.contentTitle}</Text>
 
+                {/* Join Notification Banner */}
+                {joinNotification && isHost && (
+                  <View style={styles.notificationBanner}>
+                    <Text style={styles.notificationText}>👋 {joinNotification}</Text>
+                  </View>
+                )}
+
                 {/* Join Code */}
                 <View style={styles.codeContainer}>
                   <Text style={styles.codeLabel}>Join Code</Text>
@@ -374,13 +471,28 @@ export default function WatchPartyComponent({
                 {/* Status */}
                 <View style={styles.statusContainer}>
                   <Text style={styles.statusDot}>
-                    {party.status === 'playing' ? '🟢' : '⏸️'}
+                    {party.status === 'playing' ? '🟢' : party.status === 'waiting' ? '⏱️' : '⏸️'}
                   </Text>
                   <Text style={styles.statusText}>
                     {party.status === 'playing' ? 'Playing' :
-                     party.status === 'paused' ? 'Paused' : 'Waiting'}
+                     party.status === 'paused' ? 'Paused' :
+                     isHost ? 'In Lobby' : 'Waiting for host to start...'}
                   </Text>
                 </View>
+
+                {/* Start Watch Party Button (Host Only, when status is 'waiting') */}
+                {isHost && party.status === 'waiting' && (
+                  <TouchableOpacity style={styles.startButton} onPress={handleStartWatchParty}>
+                    <Text style={styles.startButtonText}>▶️ Start Watch Party</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Guest waiting message */}
+                {!isHost && party.status === 'waiting' && (
+                  <Text style={styles.waitingMessage}>
+                    The host will start the movie soon...
+                  </Text>
+                )}
 
                 {/* Leave Button */}
                 <TouchableOpacity
@@ -643,5 +755,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 16
+  },
+  notificationBanner: {
+    backgroundColor: tokens.accentCyan,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center'
+  },
+  notificationText: {
+    color: tokens.textPrimary,
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  startButton: {
+    backgroundColor: tokens.accentCyan,
+    padding: 16,
+    borderRadius: 24,
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  startButtonText: {
+    color: tokens.textPrimary,
+    fontSize: 18,
+    fontWeight: '700'
+  },
+  waitingMessage: {
+    textAlign: 'center',
+    color: tokens.textSecondary,
+    marginBottom: 12,
+    fontSize: 14
   }
 });

@@ -11,7 +11,8 @@ import {
   FlatList,
   ScrollView,
   Modal,
-  Share
+  Share,
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -217,11 +218,12 @@ export default function App() {
   const handleWatchFull = (item: TrailerDoc) => {
     const videoUrl = item.fullContentVideoId;
     if (!videoUrl) return;
+    console.log('[App] Setting watchingFull to:', videoUrl);
     setWatchingFull(videoUrl);
   };
 
   const handleSave = () => {
-    // Placeholder for future watchlist functionality
+    Alert.alert('Coming soon', 'Watchlist support is coming soon—stay tuned!');
   };
 
   const handleLike = async (contentId: string) => {
@@ -537,6 +539,7 @@ export default function App() {
   }
 
   if (watchingFull) {
+    console.log('[App] Rendering full movie modal for:', watchingFull);
     return (
       <Modal visible={true} animationType="slide">
         <SafeAreaView style={{ flex: 1, backgroundColor: tokens.backgroundPrimary }}>
@@ -619,9 +622,11 @@ export default function App() {
         showMenu={showWatchPartyMenu}
         onMenuClose={() => setShowWatchPartyMenu(false)}
         onPartyStateChange={(inParty) => {
-          console.log('Watch party state changed:', inParty);
+          console.log('[App] Watch party state changed:', inParty);
         }}
         onWatchFullMovie={(videoUrl) => {
+          console.log('[App] onWatchFullMovie called with:', videoUrl);
+          setShowWatchPartyMenu(false); // Close the watch party menu
           setWatchingFull(videoUrl);
         }}
       />

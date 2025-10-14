@@ -395,7 +395,7 @@ export async function createWatchParty(
     hostUserId: userId,
     contentId: content.id,
     contentTitle: content.title,
-    videoUrl: content.trailerVideoId || content.trailerUrl || '',
+    videoUrl: content.fullContentVideoId || content.fullContentUrl || '',
     status: 'waiting',
     currentTime: 0,
     lastSync: Timestamp.now(),
@@ -519,21 +519,28 @@ export function subscribeToWatchParty(partyId: string, callback: WatchPartyCallb
   const db = getFirestore(getFirebaseApp());
   const partyRef = doc(db, 'watchParties', partyId);
 
+  console.log('[Firestore] Creating subscription for party:', partyId);
+
   const unsubscribe = onSnapshot(
     partyRef,
     snapshot => {
+      console.log('[Firestore] Snapshot received for party:', partyId, 'exists:', snapshot.exists());
       if (snapshot.exists()) {
-        callback({ id: snapshot.id, ...snapshot.data() } as WatchParty);
+        const data = snapshot.data();
+        console.log('[Firestore] Party data:', { status: data.status, currentTime: data.currentTime, participants: data.participants?.length });
+        callback({ id: snapshot.id, ...data } as WatchParty);
       } else {
+        console.log('[Firestore] Party document does not exist');
         callback(null);
       }
     },
     error => {
-      console.error('Error subscribing to watch party:', error);
+      console.error('[Firestore] Error subscribing to watch party:', error);
       callback(null);
     }
   );
 
+  console.log('[Firestore] Subscription created successfully for:', partyId);
   return unsubscribe;
 }
 

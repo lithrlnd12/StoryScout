@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Story Scout",
+    "slug": "story-scout",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./mobile/assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./mobile/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f121a"
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.storyscout.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./mobile/assets/adaptive-icon.png",
+        "backgroundColor": "#0f121a"
+      },
+      "package": "com.storyscout.app"
+    },
+    "web": {
+      "favicon": "./mobile/assets/favicon.png"
+    }
+  }
+}

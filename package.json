@@ -1,6 +1,7 @@
 {
   "name": "story-scout",
   "private": true,
+  "main": "mobile/index.js",
   "workspaces": [
     "mobile",
     "web",

@@ -25,14 +25,22 @@ function getProcessSource(): EnvSource | undefined {
 
 function getViteSource(): EnvSource | undefined {
   // Vite exposes env vars via import.meta.env
-  // This version is for web only - React Native uses env.native.ts
+  // This version is for web only - React Native doesn't support import.meta
+  // Skip entirely in React Native environment
+  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
+    return undefined;
+  }
+
+  // Use indirect access to avoid Hermes parse-time error
+  // This prevents Hermes from even seeing "import.meta" during parsing
   try {
-    // @ts-ignore - import.meta may not exist in all environments
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      return import.meta.env as EnvSource;
+    // @ts-ignore
+    const importMeta = typeof globalThis !== 'undefined' && (globalThis as any)['import.meta'];
+    if (importMeta && importMeta.env) {
+      return importMeta.env as EnvSource;
     }
   } catch (e) {
-    // Not in Vite environment or import.meta not supported
+    // Not in Vite environment
   }
   return undefined;
 }

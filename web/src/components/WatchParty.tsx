@@ -81,10 +81,25 @@ export default function WatchPartyComponent({
 
   // Sync video playback with party state
   const syncVideoWithParty = (partyState: WatchParty) => {
-    // If party just started playing, navigate EVERYONE to the full movie
-    if (partyState.status === 'playing' && partyState.videoUrl && onWatchFullMovie) {
+    // CRITICAL: Only navigate to full movie if status is 'playing' AND modal is currently showing
+    // This prevents automatic navigation when guest first joins (they should see lobby first)
+    if (partyState.status === 'playing' && partyState.videoUrl && onWatchFullMovie && showCreateModal) {
       console.log('Party started! Navigating to full movie:', partyState.videoUrl);
       onWatchFullMovie(partyState.videoUrl);
+      setShowCreateModal(false);
+      return;
+    }
+
+    // If in lobby (waiting), pause the video for guests and ensure modal is visible
+    if (partyState.status === 'waiting' && !isHost && videoRef.current) {
+      const video = videoRef.current;
+      if (!video.paused) {
+        video.pause();
+      }
+      // Ensure lobby modal is visible for guests waiting
+      if (!showCreateModal) {
+        setShowCreateModal(true);
+      }
       return;
     }
 
@@ -109,9 +124,12 @@ export default function WatchPartyComponent({
     }
   };
 
-  // Host: Update party state every 5 seconds
+  // Host: Update party state every 5 seconds (ONLY when party is already playing)
   useEffect(() => {
     if (!party || !isHost || !videoRef.current) return;
+
+    // Don't update if still in lobby (status is 'waiting')
+    if (party.status === 'waiting') return;
 
     const interval = setInterval(() => {
       const video = videoRef.current;
@@ -182,10 +200,10 @@ export default function WatchPartyComponent({
       setShowJoinModal(false);
       setShowMenu(false);
       setJoinCode('');
-      setShowCreateModal(true); // Show party details for participants too
+      setShowCreateModal(true); // Show lobby for guests
       onPartyStateChange?.(true);
 
-      alert(`Joined party: ${joinedParty.contentTitle}\nWaiting for host to start...`);
+      // Don't show alert - guest stays in lobby modal and sees "Waiting for host..."
     } catch (err: any) {
       setError(err.message || 'Failed to join party');
       alert(err.message || 'Failed to join party');
@@ -395,11 +413,12 @@ export default function WatchPartyComponent({
             {/* Status */}
             <div style={statusContainerStyle}>
               <span style={{ fontSize: 16, marginRight: 8 }}>
-                {party.status === 'playing' ? '🟢' : '⏸️'}
+                {party.status === 'playing' ? '🟢' : party.status === 'waiting' ? '⏱️' : '⏸️'}
               </span>
               <span style={{ color: tokens.textPrimary, fontWeight: 600 }}>
                 {party.status === 'playing' ? 'Playing' :
-                 party.status === 'paused' ? 'Paused' : 'Waiting'}
+                 party.status === 'paused' ? 'Paused' :
+                 isHost ? 'In Lobby' : 'Waiting for host to start...'}
               </span>
             </div>
 
@@ -408,6 +427,13 @@ export default function WatchPartyComponent({
               <button style={startButtonStyle} onClick={handleStartWatchParty}>
                 ▶️ Start Watch Party
               </button>
+            )}
+
+            {/* Guest waiting message */}
+            {!isHost && party.status === 'waiting' && (
+              <p style={{ textAlign: 'center', color: tokens.textSecondary, marginBottom: 12, fontSize: 14 }}>
+                The host will start the movie soon...
+              </p>
             )}
 
             {/* Leave Button */}

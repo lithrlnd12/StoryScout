@@ -16,8 +16,10 @@
       "@tokens/*": ["../shared/tokens/*"],
       "@mocks/*": ["../shared/mocks/*"]
     },
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "skipDefaultLibCheck": true
   },
   "include": ["src"],
-  "references": []
+  "references": [],
+  "exclude": ["node_modules"]
 }
