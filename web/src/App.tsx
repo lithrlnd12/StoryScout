@@ -16,6 +16,7 @@ import {
   signOutFirebase,
   type User
 } from './firebaseAuth';
+import WatchPartyComponent from './components/WatchParty';
 import tokens from '@tokens/colors.json';
 import archiveContent from '@mocks/archive-content.json';
 
@@ -65,6 +66,7 @@ export default function App() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isGloballyMuted, setIsGloballyMuted] = useState(true); // Global mute state
+  const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
@@ -438,6 +440,9 @@ export default function App() {
                   <button style={secondaryButtonStyle} onClick={() => alert('Watchlist coming soon!')}>
                     Save
                   </button>
+                  <button style={secondaryButtonStyle} onClick={() => setShowWatchPartyMenu(true)}>
+                    👥
+                  </button>
                 </div>
               </div>
             </div>
@@ -446,6 +451,9 @@ export default function App() {
       </section>
     );
   };
+
+  // Calculate current trailer early so it can be used in all render paths
+  const currentTrailer = filteredTrailers[currentIndex] || null;
 
   if (showReviewModal) {
     const currentItem = trailers.find(item => item.id === showReviewModal);
@@ -497,7 +505,7 @@ export default function App() {
     );
   }
 
-  if (watchingFull) {
+  if (watchingFull && user) {
     return (
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: tokens.backgroundPrimary, zIndex: 9999 }}>
         <button
@@ -533,6 +541,20 @@ export default function App() {
             width: '100%',
             height: '100%',
             objectFit: 'contain'
+          }}
+        />
+        {/* Watch Party Component - shows on top of full movie */}
+        <WatchPartyComponent
+          user={user}
+          currentContent={currentTrailer}
+          videoRef={{ current: currentTrailer ? videoRefs.current[currentTrailer.id] || null : null }}
+          showMenu={showWatchPartyMenu}
+          onMenuClose={() => setShowWatchPartyMenu(false)}
+          onPartyStateChange={(inParty) => {
+            console.log('Watch party state changed:', inParty);
+          }}
+          onWatchFullMovie={(videoUrl) => {
+            setWatchingFull(videoUrl);
           }}
         />
       </div>
@@ -615,10 +637,25 @@ export default function App() {
         {filteredTrailers.length === 0 && (
           <div style={emptyStateStyle}>
             <h2>No trailers available yet</h2>
-            <p style={{ color: tokens.textSecondary }}>We’re busy scouting more stories for this genre.</p>
+            <p style={{ color: tokens.textSecondary }}>We're busy scouting more stories for this genre.</p>
           </div>
         )}
       </div>
+
+      {/* Watch Party Component */}
+      <WatchPartyComponent
+        user={user}
+        currentContent={currentTrailer}
+        videoRef={{ current: currentTrailer ? videoRefs.current[currentTrailer.id] || null : null }}
+        showMenu={showWatchPartyMenu}
+        onMenuClose={() => setShowWatchPartyMenu(false)}
+        onPartyStateChange={(inParty) => {
+          console.log('Watch party state changed:', inParty);
+        }}
+        onWatchFullMovie={(videoUrl) => {
+          setWatchingFull(videoUrl);
+        }}
+      />
     </div>
   );
 }

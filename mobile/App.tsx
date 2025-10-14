@@ -35,6 +35,7 @@ import {
   signOutFirebase,
   type User
 } from '../shared/firebase/auth';
+import WatchPartyComponent from './src/components/WatchParty';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -97,6 +98,8 @@ export default function App() {
   const [reviewText, setReviewText] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [isGloballyMuted, setIsGloballyMuted] = useState(true);
+  const [currentContent, setCurrentContent] = useState<TrailerDoc | null>(null);
+  const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
   const listRef = useRef<FlatList<TrailerDoc>>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
@@ -157,11 +160,15 @@ export default function App() {
 
   const onViewableItemsChanged = useCallback(({ viewableItems }: ViewableCallback) => {
     if (viewableItems.length > 0) {
-      const activeId = viewableItems[0].item.id;
+      const activeItem = viewableItems[0].item;
+      const activeId = activeItem.id;
       const index = filteredFeed.findIndex(item => item.id === activeId);
       if (index >= 0) {
         setCurrentIndex(index);
       }
+
+      // Track current content for watch party
+      setCurrentContent(activeItem);
 
       // Play the visible video, pause all others
       Object.keys(videoRefs.current).forEach(async (videoId) => {
@@ -459,6 +466,12 @@ export default function App() {
               <TouchableOpacity style={styles.secondaryCta} onPress={handleSave}>
                 <Text style={styles.secondaryCtaText}>Save</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryCta}
+                onPress={() => setShowWatchPartyMenu(true)}
+              >
+                <Text style={styles.secondaryCtaText}>👥</Text>
+              </TouchableOpacity>
             </View>
           </View>
       </View>
@@ -596,6 +609,21 @@ export default function App() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
+      />
+
+      {/* Watch Party Component */}
+      <WatchPartyComponent
+        user={user}
+        currentContent={currentContent}
+        videoRef={{ current: currentContent ? videoRefs.current[currentContent.id] || null : null }}
+        showMenu={showWatchPartyMenu}
+        onMenuClose={() => setShowWatchPartyMenu(false)}
+        onPartyStateChange={(inParty) => {
+          console.log('Watch party state changed:', inParty);
+        }}
+        onWatchFullMovie={(videoUrl) => {
+          setWatchingFull(videoUrl);
+        }}
       />
     </SafeAreaView>
   );

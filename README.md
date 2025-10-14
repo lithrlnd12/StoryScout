@@ -200,6 +200,17 @@ VITE_FIREBASE_PROJECT_ID=story-scout
 
 ## Features
 
+### Watch Party (NEW!)
+- **Cross-Platform Sync**: Watch movies together in real-time across mobile, web, and Roku
+- **6-Character Join Codes**: Easy party creation and joining with uppercase codes (e.g., ABC123)
+- **Real-Time Playback Sync**: Play, pause, and seek synchronized across all participants
+- **Participant List**: See who's watching with platform indicators (📱 mobile, 💻 web, 📺 Roku)
+- **Host Controls**: Party creator controls playback; guests sync automatically
+- **Multi-Platform Support**:
+  - Mobile & Web: Real-time Firebase sync
+  - Roku: REST API polling for sync state
+- **Auto-Join Full Movie**: Guests automatically start the full movie when joining a party
+
 ### Engagement System
 - **TikTok-Style Interactions**: Vertical engagement bar with likes, reviews, and shares
 - **Review System**: 5-star ratings with text reviews
@@ -278,6 +289,17 @@ User interactions (likes, shares):
 User reviews with ratings:
 - `userId`, `contentId`, `rating` (1-5), `reviewText`
 - Auto-calculates `averageRating` on `publicContent`
+
+#### watchParties
+Real-time watch party sessions:
+- `code`: 6-character uppercase join code (document ID)
+- `hostUserId`: Party creator
+- `contentId`, `contentTitle`, `videoUrl`: Content being watched
+- `status`: 'waiting' | 'playing' | 'paused' | 'ended'
+- `currentTime`: Playback position in seconds
+- `participants`: Array of {userId, displayName, platform, joinedAt}
+- `maxParticipants`: Capacity limit (default: 10)
+- `createdAt`, `lastSync`: Timestamps
 
 See `CHANGELOG.md` for detailed schema documentation.
 
