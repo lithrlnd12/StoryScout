@@ -8,16 +8,21 @@ sub init()
     m.genreLabel = m.top.findNode("genreLabel")
     m.titleLabel = m.top.findNode("titleLabel")
     m.synopsisLabel = m.top.findNode("synopsisLabel")
-    m.likeCount = m.top.findNode("likeCount")
-    m.ratingText = m.top.findNode("ratingText")
-    m.shareCount = m.top.findNode("shareCount")
     m.statusLabel = m.top.findNode("statusLabel")
     m.bottomCard = m.top.findNode("bottomCard")
-    m.engagementBar = m.top.findNode("engagementBar")
     m.navHint = m.top.findNode("navHint")
 
     ' Watch Party UI elements
     m.watchPartyOverlay = m.top.findNode("watchPartyOverlay")
+    m.watchPartyLoading = m.top.findNode("watchPartyLoading")
+    m.watchPartyLobby = m.top.findNode("watchPartyLobby")
+    m.loadingText = m.top.findNode("loadingText")
+    m.lobbyCode = m.top.findNode("lobbyCode")
+    m.lobbyContentTitle = m.top.findNode("lobbyContentTitle")
+    m.lobbyParticipantsTitle = m.top.findNode("lobbyParticipantsTitle")
+    m.lobbyParticipants = m.top.findNode("lobbyParticipants")
+    m.lobbyStatus = m.top.findNode("lobbyStatus")
+    m.lobbyInstructions = m.top.findNode("lobbyInstructions")
     m.createBg = m.top.findNode("createBg")
     m.joinBg = m.top.findNode("joinBg")
     m.cancelBg = m.top.findNode("cancelBg")
@@ -42,13 +47,18 @@ sub init()
     m.joinCodeInput = ""
     m.keyboardCursorPos = 0
     m.watchPartyMenuSelection = 0
+    m.partyStatus = "idle"  ' idle, lobby, playing
+    m.participantCount = 0
 
     ' Firebase Cloud Functions base URL
     m.apiBaseUrl = "https://us-central1-story-scout.cloudfunctions.net"
 
     ' Message port for async HTTP requests
     m.port = createObject("roMessagePort")
-    m.top.observeField("port", "onHttpResponse")
+
+    ' Polling timer for party sync
+    m.syncTimer = invalid
+    m.lobbyTimer = invalid
 
     ' Observe content data
     m.top.observeField("contentData", "onContentDataChanged")
@@ -212,11 +222,6 @@ sub loadCurrentVideo()
     end if
     m.synopsisLabel.text = synopsis
 
-    ' Update engagement counts
-    m.likeCount.text = formatCount(item.likes)
-    ' Rating text is static "Rate" - no need to update
-    m.shareCount.text = formatCount(item.shares)
-
     ' Load video
     videoContent = createObject("roSGNode", "ContentNode")
     videoContent.url = item.trailerVideoId
@@ -230,9 +235,8 @@ sub loadCurrentVideo()
     ' Hide loading status
     m.statusLabel.visible = false
 
-    ' Show bottom card and engagement bar
+    ' Show bottom card with details
     m.bottomCard.visible = true
-    m.engagementBar.visible = true
 
     m.videoPlayer.observeField("state", "onVideoState")
 end sub
@@ -245,16 +249,25 @@ sub onVideoState()
     end if
 end sub
 
-function formatCount(count as Integer) as String
-    if count >= 1000
-        countK = Int(count / 100) / 10.0
-        return countK.toStr() + "K"
-    end if
-    return count.toStr()
-end function
-
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
+
+    ' Debug: print all key presses to help identify the asterisk key
+    print "Key pressed: " + key
+
+    ' Watch Party Lobby is open - handle lobby navigation
+    if m.watchPartyLobby.visible then
+        if key = "back" then
+            ' Close lobby and cancel watch party
+            closeLobby()
+            return true
+        else if key = "OK" and m.isPartyHost then
+            ' Start playback
+            startPlayback()
+            return true
+        end if
+        return true  ' Consume all keys when lobby is open
+    end if
 
     ' Watch Party Menu is open - handle menu navigation
     if m.showWatchPartyMenu then
@@ -323,15 +336,16 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         filterContentByGenre()
         loadCurrentVideo()
         return true
-    else if key = "options" or key = "*" then
-        ' Open watch party menu
+    else if key = "options" or key = "*" or key = "replay" then
+        ' Open watch party menu (asterisk key can be "options", "*", or "replay" on different remotes)
         openWatchPartyMenu()
         return true
-    else if key = "replay" then
-        ' Open star rating overlay (moved from options key)
-        openStarRating()
-        return true
     else if key = "OK" then
+        ' If in lobby as host, start playback
+        if m.partyStatus = "lobby" and m.isPartyHost then
+            startPlayback()
+            return true
+        end if
         ' Enter full-screen mode
         enterFullScreen()
         return true
@@ -386,7 +400,6 @@ sub hideAllUI()
     m.genreRowBg.visible = false
     m.genreRow.visible = false
     m.bottomCard.visible = false
-    m.engagementBar.visible = false
     m.navHint.visible = false
 end sub
 
@@ -394,25 +407,19 @@ sub showAllUI()
     m.genreRowBg.visible = true
     m.genreRow.visible = true
     m.bottomCard.visible = true
-    m.engagementBar.visible = true
     m.navHint.visible = true
 end sub
 
 sub openStarRating()
-    ' TODO: Implement star rating overlay
-    ' For now, just show a simple message
-    m.statusLabel.text = "Star Rating Coming Soon!"
-    m.statusLabel.visible = true
-
-    ' Hide status after 2 seconds
-    m.ratingTimer = createObject("roSGNode", "Timer")
-    m.ratingTimer.duration = 2
-    m.ratingTimer.repeat = false
-    m.ratingTimer.observeField("fire", "hideRatingMessage")
-    m.ratingTimer.control = "start"
+    ' Disabled - asterisk key now opens watch party menu
+    return
 end sub
 
 sub hideRatingMessage()
+    m.statusLabel.visible = false
+end sub
+
+sub hideJoinMessage()
     m.statusLabel.visible = false
 end sub
 
@@ -467,10 +474,16 @@ sub handleWatchPartyMenuNav(key as String)
             closeWatchPartyMenu()
             createWatchParty()
         else if m.watchPartyMenuSelection = 1 then
-            ' Join Party - TODO: Show keyboard
+            ' Join Party - Temporarily disabled
             closeWatchPartyMenu()
-            m.statusLabel.text = "Join Party - Keyboard Coming Soon!"
+            m.statusLabel.text = "Join Party coming soon! Use web/mobile to join for now."
             m.statusLabel.visible = true
+            ' Auto-hide after 4 seconds
+            m.joinDisabledTimer = createObject("roSGNode", "Timer")
+            m.joinDisabledTimer.duration = 4
+            m.joinDisabledTimer.repeat = false
+            m.joinDisabledTimer.observeField("fire", "hideJoinMessage")
+            m.joinDisabledTimer.control = "start"
         else if m.watchPartyMenuSelection = 2 then
             ' Cancel
             closeWatchPartyMenu()
@@ -483,118 +496,336 @@ end sub
 sub createWatchParty()
     if m.filteredContent.count() = 0 then return
 
-    ' Temporary: Just generate local code for testing
-    chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    code = ""
-    for i = 0 to 5
-        randomIndex = Int(Rnd(0) * chars.len())
-        code = code + Mid(chars, randomIndex, 1)
-    end for
+    ' Show loading overlay
+    m.loadingText.text = "Creating Watch Party..."
+    m.watchPartyLoading.visible = true
 
-    m.partyCode = code
-    m.isPartyHost = true
-    m.watchPartyActive = true
-    m.statusLabel.text = "Party Code: " + m.partyCode
-    m.statusLabel.visible = true
-    print "Created watch party with code: " + m.partyCode
+    ' Get current content item
+    item = m.filteredContent[m.currentIndex]
 
-    ' TODO: Re-enable Firebase integration after fixing UI freeze
+    ' Generate unique user ID for Roku
+    deviceInfo = createObject("roDeviceInfo")
+    userId = "roku_" + deviceInfo.GetChannelClientId()
+
+    ' Create Task node for background HTTP operation
+    m.createTask = createObject("roSGNode", "WatchPartyTask")
+
+    ' Observe result and error fields FIRST (before setting inputs or starting)
+    m.createTask.observeField("result", "onCreatePartyResult")
+    m.createTask.observeField("error", "onCreatePartyError")
+
+    ' Now set input fields
+    m.createTask.operation = "create"
+    m.createTask.userId = userId
+    m.createTask.displayName = "Roku User"
+    m.createTask.contentId = item.id
+    m.createTask.contentTitle = item.title
+    m.createTask.videoUrl = item.fullContentVideoId
+
+    ' Start the task (runs on background thread)
+    m.createTask.control = "RUN"
+
+    print "Watch party create task started"
 end sub
 
-sub checkCreateResponse()
-    msg = m.port.getMessage()
-    if msg <> invalid and type(msg) = "roUrlEvent"
-        m.createTimer.control = "stop"
-        responseCode = msg.GetResponseCode()
-        if responseCode = 200
-            responseStr = msg.GetString()
-            response = ParseJson(responseStr)
-            if response <> invalid and response.success = true and response.code <> invalid
-                m.partyCode = response.code
-                m.isPartyHost = true
-                m.watchPartyActive = true
-                m.statusLabel.text = "Party Code: " + m.partyCode
-                m.statusLabel.visible = true
-                print "Created watch party with code: " + m.partyCode
-            else
-                m.statusLabel.text = "Failed to create party"
-                m.statusLabel.visible = true
-            end if
-        else
-            m.statusLabel.text = "Network Error: " + responseCode.toStr()
-            m.statusLabel.visible = true
-        end if
+sub onCreatePartyResult()
+    result = m.createTask.result
+    print "onCreatePartyResult called, result = "; result
+
+    ' Hide loading overlay
+    m.watchPartyLoading.visible = false
+
+    if result <> invalid and result.success = true
+        m.partyCode = result.code
+        print "Party code from result: "; m.partyCode
+        m.isPartyHost = true
+        m.watchPartyActive = true
+        m.partyStatus = "lobby"
+        m.participantCount = 1
+
+        ' Get current content
+        item = m.filteredContent[m.currentIndex]
+
+        ' Show lobby modal
+        print "Setting lobbyCode.text to: "; m.partyCode
+        print "lobbyCode node is: "; m.lobbyCode
+        print "lobbyCode current text before setting: "; m.lobbyCode.text
+        m.lobbyCode.text = m.partyCode
+        print "lobbyCode text after setting: "; m.lobbyCode.text
+        m.lobbyContentTitle.text = item.title
+        m.lobbyParticipantsTitle.text = "Watching (1/10)"
+        m.lobbyParticipants.text = "• Roku User (Host)"
+        m.lobbyStatus.text = "⏱️ In Lobby"
+        m.lobbyInstructions.text = "Press OK to start watch party"
+        print "Making lobby visible"
+        m.watchPartyLobby.visible = true
+
+        print "Created watch party with code: " + m.partyCode
+
+        ' Start polling lobby for new participants
+        startLobbyPolling()
+    else
+        print "Create party failed or result invalid"
+        m.statusLabel.text = "Failed to create party"
+        m.statusLabel.visible = true
     end if
 end sub
+
+sub onCreatePartyError()
+    error = m.createTask.error
+
+    ' Hide loading overlay
+    m.watchPartyLoading.visible = false
+
+    m.statusLabel.text = "Error: " + error
+    m.statusLabel.visible = true
+    print "Create party error: " + error
+end sub
+
 
 sub joinWatchParty(code as String)
     ' Show joining message
     m.statusLabel.text = "Joining party..."
     m.statusLabel.visible = true
 
-    ' Create HTTP request to Firebase Cloud Function (async, non-blocking)
-    request = createObject("roUrlTransfer")
-    request.SetUrl(m.apiBaseUrl + "/joinWatchParty")
-    request.SetCertificatesFile("common:/certs/ca-bundle.crt")
-    request.InitClientCertificates()
-    request.EnablePeerVerification(false)
-    request.EnableHostVerification(false)
-    request.AddHeader("Content-Type", "application/json")
-
     ' Generate unique user ID for Roku (using device ID)
     deviceInfo = createObject("roDeviceInfo")
     userId = "roku_" + deviceInfo.GetChannelClientId()
 
-    ' Prepare request body
-    body = {
-        code: code,
-        userId: userId,
-        displayName: "Roku User",
-        platform: "roku"
-    }
+    ' Create Task node for background HTTP operation
+    m.joinTask = createObject("roSGNode", "WatchPartyTask")
+    m.joinTask.observeField("result", "onJoinPartyResult")
+    m.joinTask.observeField("error", "onJoinPartyError")
+    m.joinTask.operation = "join"
+    m.joinTask.joinCode = code
+    m.joinTask.userId = userId
+    m.joinTask.displayName = "Roku User"
+    m.joinTask.control = "RUN"
 
-    ' Send async request (non-blocking)
-    request.SetMessagePort(m.port)
-    m.joinRequest = request
-    if request.AsyncPostFromString(FormatJson(body))
-        print "Watch party join request sent for code: " + code
-        ' Timer to check response
-        m.joinTimer = createObject("roSGNode", "Timer")
-        m.joinTimer.duration = 0.5
-        m.joinTimer.repeat = true
-        m.joinTimer.observeField("fire", "checkJoinResponse")
-        m.joinTimer.control = "start"
+    print "Watch party join request sent for code: " + code
+end sub
+
+sub onJoinPartyResult()
+    result = m.joinTask.result
+
+    if result <> invalid and result.success = true and result.party <> invalid
+        m.partyCode = result.party.code
+        m.isPartyHost = false
+        m.watchPartyActive = true
+
+        ' Check party status
+        if result.party.status = "waiting" then
+            m.partyStatus = "lobby"
+            participantCount = result.party.participants.count()
+            m.participantCount = participantCount
+            m.statusLabel.text = "In lobby | " + participantCount.toStr() + " people | Waiting for host..."
+            m.statusLabel.visible = true
+            ' Start polling for party state changes
+            startLobbyPolling()
+        else if result.party.status = "playing" then
+            ' Party already started, join in progress
+            m.partyStatus = "playing"
+            m.statusLabel.text = "Joined party: " + m.partyCode + " | Syncing..."
+            m.statusLabel.visible = true
+            startPlaybackSync()
+        end if
+
+        print "Joined watch party: " + m.partyCode
     else
-        m.statusLabel.text = "Failed to send request"
+        m.statusLabel.text = "Party not found"
         m.statusLabel.visible = true
     end if
 end sub
 
-sub checkJoinResponse()
-    msg = m.port.getMessage()
-    if msg <> invalid and type(msg) = "roUrlEvent"
-        m.joinTimer.control = "stop"
-        responseCode = msg.GetResponseCode()
-        if responseCode = 200
-            responseStr = msg.GetString()
-            response = ParseJson(responseStr)
-            if response <> invalid and response.success = true
-                m.partyCode = response.party.code
-                m.isPartyHost = false
-                m.watchPartyActive = true
-                m.statusLabel.text = "Joined party: " + m.partyCode
-                m.statusLabel.visible = true
-                print "Joined watch party: " + m.partyCode
-            else
-                m.statusLabel.text = "Party not found"
-                m.statusLabel.visible = true
+sub onJoinPartyError()
+    error = m.joinTask.error
+    m.statusLabel.text = "Error: " + error
+    m.statusLabel.visible = true
+    print "Join party error: " + error
+end sub
+
+' ============================================================================
+' LOBBY AND SYNC FUNCTIONS
+' ============================================================================
+
+sub closeLobby()
+    ' Close the lobby modal
+    m.watchPartyLobby.visible = false
+
+    ' Stop lobby polling
+    if m.lobbyTimer <> invalid
+        m.lobbyTimer.control = "stop"
+        m.lobbyTimer = invalid
+    end if
+
+    ' Reset watch party state
+    m.watchPartyActive = false
+    m.isPartyHost = false
+    m.partyCode = ""
+    m.partyStatus = "idle"
+    m.participantCount = 0
+
+    print "Closed lobby"
+end sub
+
+sub startLobbyPolling()
+    ' Poll every 2 seconds for lobby updates
+    m.lobbyTimer = createObject("roSGNode", "Timer")
+    m.lobbyTimer.duration = 2
+    m.lobbyTimer.repeat = true
+    m.lobbyTimer.observeField("fire", "pollLobbyState")
+    m.lobbyTimer.control = "start"
+
+    print "Started lobby polling"
+end sub
+
+sub pollLobbyState()
+    ' Create Task node for background HTTP operation
+    m.pollTask = createObject("roSGNode", "WatchPartyTask")
+    m.pollTask.operation = "get"
+    m.pollTask.partyCode = m.partyCode
+
+    ' Observe result
+    m.pollTask.observeField("result", "onPollResult")
+
+    ' Start the task (runs on background thread)
+    m.pollTask.control = "RUN"
+end sub
+
+sub onPollResult()
+    result = m.pollTask.result
+
+    if result <> invalid and result.success = true and result.party <> invalid
+        party = result.party
+
+        ' Update participant count and list
+        if party.participants <> invalid
+            participantCount = party.participants.count()
+            if participantCount <> m.participantCount
+                m.participantCount = participantCount
+
+                ' Update lobby UI
+                m.lobbyParticipantsTitle.text = "Watching (" + participantCount.toStr() + "/10)"
+
+                ' Build participant list
+                participantList = ""
+                for i = 0 to party.participants.count() - 1
+                    participant = party.participants[i]
+                    icon = "•"
+                    if participant.platform = "mobile" then icon = "📱"
+                    if participant.platform = "web" then icon = "💻"
+                    if participant.platform = "roku" then icon = "📺"
+
+                    line = icon + " " + participant.displayName
+                    if participant.userId = party.hostUserId then line = line + " (Host)"
+                    if i < party.participants.count() - 1 then line = line + Chr(10)
+                    participantList = participantList + line
+                end for
+                m.lobbyParticipants.text = participantList
             end if
-        else if responseCode = 404
-            m.statusLabel.text = "Party not found"
-            m.statusLabel.visible = true
-        else
-            m.statusLabel.text = "Network Error: " + responseCode.toStr()
-            m.statusLabel.visible = true
+        end if
+
+        ' Check if party started
+        if party.status = "playing" and m.partyStatus = "lobby"
+            m.partyStatus = "playing"
+            m.lobbyTimer.control = "stop"
+            m.watchPartyLobby.visible = false
+            ' Start synchronized playback
+            startPlaybackSync()
         end if
     end if
+end sub
+
+sub startPlayback()
+    ' Host starts the party - update Firebase
+    if not m.isPartyHost then return
+    if m.partyStatus <> "lobby" then return
+
+    m.partyStatus = "playing"
+    m.statusLabel.text = "Starting party..."
+    m.statusLabel.visible = true
+
+    ' Stop lobby polling
+    if m.lobbyTimer <> invalid
+        m.lobbyTimer.control = "stop"
+    end if
+
+    ' Close lobby modal
+    m.watchPartyLobby.visible = false
+
+    ' Update party status to playing using Task
+    m.startTask = createObject("roSGNode", "WatchPartyTask")
+    m.startTask.operation = "update"
+    m.startTask.partyCode = m.partyCode
+    m.startTask.status = "playing"
+    m.startTask.currentTime = 0
+    m.startTask.control = "RUN"
+
+    print "Party playback started"
+    ' Start sync loop
+    startPlaybackSync()
+end sub
+
+sub startPlaybackSync()
+    ' Start polling for playback sync every 3 seconds
+    m.syncTimer = createObject("roSGNode", "Timer")
+    m.syncTimer.duration = 3
+    m.syncTimer.repeat = true
+    m.syncTimer.observeField("fire", "syncPlayback")
+    m.syncTimer.control = "start"
+
+    ' Hide status label
+    m.statusLabel.visible = false
+
+    print "Started playback sync"
+end sub
+
+sub syncPlayback()
+    ' Get current party state using Task
+    m.syncTask = createObject("roSGNode", "WatchPartyTask")
+    m.syncTask.operation = "get"
+    m.syncTask.partyCode = m.partyCode
+    m.syncTask.observeField("result", "onSyncResult")
+    m.syncTask.control = "RUN"
+end sub
+
+sub onSyncResult()
+    result = m.syncTask.result
+
+    if result <> invalid and result.success = true and result.party <> invalid
+        party = result.party
+
+        ' Sync playback state
+        if party.status = "playing" then
+            if m.videoPlayer.state <> "playing" then
+                m.videoPlayer.control = "play"
+            end if
+
+            ' Check for drift and sync if > 3 seconds
+            drift = abs(m.videoPlayer.position - party.currentTime)
+            if drift > 3 then
+                m.videoPlayer.seek = party.currentTime
+                print "Synced playback: drift was " + drift.toStr() + " seconds"
+            end if
+        else if party.status = "paused" then
+            if m.videoPlayer.state = "playing" then
+                m.videoPlayer.control = "pause"
+            end if
+        end if
+
+        ' If host, update party state with current time
+        if m.isPartyHost and m.videoPlayer.state = "playing"
+            updatePartyState("playing", m.videoPlayer.position)
+        end if
+    end if
+end sub
+
+sub updatePartyState(status as String, currentTime as Integer)
+    ' Host updates party state using Task
+    m.updateTask = createObject("roSGNode", "WatchPartyTask")
+    m.updateTask.operation = "update"
+    m.updateTask.partyCode = m.partyCode
+    m.updateTask.status = status
+    m.updateTask.currentTime = currentTime
+    m.updateTask.control = "RUN"
 end sub

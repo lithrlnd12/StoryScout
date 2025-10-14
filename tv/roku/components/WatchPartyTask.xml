@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="WatchPartyTask" extends="Task">
+  <interface>
+    <!-- Input fields -->
+    <field id="operation" type="string" /> <!-- "create", "join", "get", "update" -->
+    <field id="userId" type="string" />
+    <field id="displayName" type="string" />
+    <field id="contentId" type="string" />
+    <field id="contentTitle" type="string" />
+    <field id="videoUrl" type="string" />
+    <field id="joinCode" type="string" /> <!-- For join/get operations -->
+    <field id="partyCode" type="string" /> <!-- For get/update operations -->
+    <field id="status" type="string" /> <!-- For update operation -->
+    <field id="currentTime" type="integer" /> <!-- For update operation -->
+
+    <!-- Output fields -->
+    <field id="result" type="assocarray" alwaysNotify="true" />
+    <field id="error" type="string" alwaysNotify="true" />
+  </interface>
+
+  <script type="text/brightscript" uri="pkg:/components/WatchPartyTask.brs" />
+</component>

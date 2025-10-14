@@ -95,31 +95,10 @@
                 maxLines="2" />
         </Group>
 
-        <!-- Right Action Bar - Action Safe Zone Compliant -->
-        <Group id="engagementBar" translation="[1680, 380]">
-            <!-- Like -->
-            <Group id="likeGroup" translation="[0, 0]">
-                <Label id="likeIcon" translation="[30, 0]" text="♥" font="font:LargeSystemFont" color="#FFFFFF" />
-                <Label id="likeCount" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" />
-            </Group>
-
-            <!-- Star Rating -->
-            <Group id="ratingGroup" translation="[0, 150]">
-                <Label id="ratingIcon" translation="[30, 0]" text="★" font="font:LargeSystemFont" color="#FFFFFF" />
-                <Label id="ratingText" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" text="Rate" />
-            </Group>
-
-            <!-- Share -->
-            <Group id="shareGroup" translation="[0, 300]">
-                <Label id="shareIcon" translation="[30, 0]" text="↗" font="font:LargeSystemFont" color="#FFFFFF" />
-                <Label id="shareCount" translation="[0, 65]" width="120" horizAlign="center" font="font:MediumSystemFont" color="#FFFFFF" />
-            </Group>
-        </Group>
-
         <!-- Navigation Hint (Bottom Right, Minimal) -->
         <Label
             id="navHint"
-            text="↑↓ Browse  •  ←→ Genres  •  OK = Watch  •  * = Rate"
+            text="↑↓ Browse  •  ←→ Genres  •  * = Watch Party  •  OK = Watch"
             translation="[1380, 1030]"
             width="460"
             height="30"
@@ -138,6 +117,33 @@
             horizAlign="center"
             font="font:LargeBoldSystemFont"
             color="#FFFFFF" />
+
+        <!-- Watch Party Loading Overlay -->
+        <Group id="watchPartyLoading" translation="[0, 0]" visible="false">
+            <!-- Dark Overlay -->
+            <Rectangle
+                width="1920"
+                height="1080"
+                color="#000000"
+                opacity="0.9" />
+
+            <!-- Loading Card -->
+            <Group translation="[710, 440]">
+                <Rectangle
+                    width="500"
+                    height="200"
+                    color="#1F2937" />
+                <Label
+                    id="loadingText"
+                    text="Creating Watch Party..."
+                    translation="[0, 70]"
+                    width="500"
+                    height="60"
+                    horizAlign="center"
+                    font="font:LargeBoldSystemFont"
+                    color="#FFFFFF" />
+            </Group>
+        </Group>
 
         <!-- Watch Party Menu Overlay -->
         <Group id="watchPartyOverlay" translation="[0, 0]" visible="false">
@@ -178,12 +184,20 @@
                             color="#E91E63" />
                         <Label
                             text="🎬 Create Watch Party"
-                            translation="[0, 20]"
+                            translation="[0, 12]"
                             width="400"
-                            height="70"
+                            height="34"
                             horizAlign="center"
                             font="font:MediumBoldSystemFont"
                             color="#FFFFFF" />
+                        <Label
+                            text="Start watching together"
+                            translation="[0, 46]"
+                            width="400"
+                            height="24"
+                            horizAlign="center"
+                            font="font:SmallSystemFont"
+                            color="#D1D5DB" />
                     </Group>
 
                     <!-- Join Party Option -->
@@ -195,12 +209,20 @@
                             color="#374151" />
                         <Label
                             text="🔗 Join Watch Party"
-                            translation="[0, 20]"
+                            translation="[0, 12]"
                             width="400"
-                            height="70"
+                            height="34"
                             horizAlign="center"
                             font="font:MediumBoldSystemFont"
                             color="#D1D5DB" />
+                        <Label
+                            text="Feature coming soon"
+                            translation="[0, 46]"
+                            width="400"
+                            height="24"
+                            horizAlign="center"
+                            font="font:SmallSystemFont"
+                            color="#8B92A8" />
                     </Group>
 
                     <!-- Cancel Option -->
@@ -230,6 +252,112 @@
                     horizAlign="center"
                     font="font:SmallSystemFont"
                     color="#8B92A8" />
+            </Group>
+        </Group>
+
+        <!-- Watch Party Lobby/Details Modal -->
+        <Group id="watchPartyLobby" translation="[0, 0]" visible="false">
+            <!-- Dark Overlay (renders first/behind) -->
+            <Rectangle
+                width="1920"
+                height="1080"
+                color="#000000"
+                opacity="0.85" />
+
+            <!-- Lobby Card (renders on top of overlay) -->
+            <Group id="lobbyCard" translation="[560, 240]">
+                <!-- Card Background -->
+                <Rectangle
+                    width="800"
+                    height="600"
+                    color="#1F2937" />
+
+                <!-- Title -->
+                <Label
+                    id="lobbyTitle"
+                    text="🎬 Watch Party"
+                    translation="[0, 30]"
+                    width="800"
+                    height="50"
+                    horizAlign="center"
+                    font="font:LargeBoldSystemFont"
+                    color="#FFFFFF" />
+
+                <!-- Content Title -->
+                <Label
+                    id="lobbyContentTitle"
+                    text="Movie Title"
+                    translation="[0, 90]"
+                    width="800"
+                    height="40"
+                    horizAlign="center"
+                    font="font:MediumSystemFont"
+                    color="#00E5FF" />
+
+                <!-- Join Code Section -->
+                <Label
+                    text="SHARE THIS CODE:"
+                    translation="[150, 150]"
+                    width="500"
+                    height="30"
+                    horizAlign="center"
+                    font="font:MediumBoldSystemFont"
+                    color="#8B92A8" />
+
+                <!-- Join Code - LARGE, prominent, no background box -->
+                <Label
+                    id="lobbyCode"
+                    text=""
+                    translation="[150, 190]"
+                    width="500"
+                    height="80"
+                    horizAlign="center"
+                    color="0xFFFFFFFF" />
+
+                <!-- Participants Section -->
+                <Group translation="[50, 280]">
+                    <Label
+                        id="lobbyParticipantsTitle"
+                        text="Watching (1/10)"
+                        translation="[0, 0]"
+                        width="700"
+                        height="30"
+                        font="font:MediumBoldSystemFont"
+                        color="#FFFFFF" />
+
+                    <!-- Participant List (will be populated dynamically) -->
+                    <Label
+                        id="lobbyParticipants"
+                        text="• Roku User (Host)"
+                        translation="[0, 40]"
+                        width="700"
+                        height="120"
+                        font="font:MediumSystemFont"
+                        color="#D1D5DB"
+                        wrap="true" />
+                </Group>
+
+                <!-- Status -->
+                <Group translation="[50, 450]">
+                    <Label
+                        id="lobbyStatus"
+                        text="⏱️ In Lobby"
+                        translation="[0, 0]"
+                        width="700"
+                        height="40"
+                        horizAlign="center"
+                        font="font:MediumBoldSystemFont"
+                        color="#00E5FF" />
+                    <Label
+                        id="lobbyInstructions"
+                        text="Press OK to start watch party"
+                        translation="[0, 45]"
+                        width="700"
+                        height="30"
+                        horizAlign="center"
+                        font="font:SmallSystemFont"
+                        color="#8B92A8" />
+                </Group>
             </Group>
         </Group>
     </children>

@@ -21,10 +21,19 @@ TikTok-style vertical feed for discovering short films and trailers on Roku TV.
 - ✅ **No accidental scrolling** - Smart state management
 
 ### **Interactive Features**
+- ✅ **Watch Party** - Synchronized viewing across Roku, mobile, and web
 - ✅ **Star rating system** - Press * to rate films (1-5 stars)
 - ✅ **Like functionality** - Heart icon with count
 - ✅ **Share functionality** - Share icon with count
 - ✅ **Genre pills** - Dynamic filtering with visual feedback
+
+### **Watch Party (Cross-Platform)**
+- ✅ **Create party on Roku** - Host watch sessions from TV
+- ✅ **6-character join codes** - Easy sharing with friends
+- ✅ **Real-time participant list** - See who's watching (Roku, mobile, web)
+- ✅ **Synchronized playback** - Host controls start time for all viewers
+- ✅ **Lobby system** - Wait for participants before starting
+- ✅ **Platform indicators** - Icons show device type (📺 Roku, 📱 Mobile, 💻 Web)
 
 ## Development Setup
 
@@ -115,7 +124,7 @@ zip -r StoryScout.zip manifest source components images
 | **← Left** | Previous genre (cycles through) |
 | **→ Right** | Next genre (cycles through) |
 | **OK** | Enter full-screen watch mode |
-| **\* (Asterisk)** | Open star rating overlay |
+| **\* (Asterisk)** | Open Watch Party menu |
 | **Back** | Exit app |
 
 ### **Full-Screen Mode (After pressing OK)**
@@ -129,10 +138,18 @@ zip -r StoryScout.zip manifest source components images
 | **Fast Forward** | Skip forward 10 seconds |
 | **Rewind** | Skip backward 10 seconds |
 
+### **Watch Party Mode**
+| Button | Action |
+|--------|--------|
+| **↑ Up / ↓ Down** | Navigate menu options |
+| **OK** | Select menu option / Start party (host only) |
+| **Back** | Close Watch Party menu/lobby |
+
 ### **UI States**
 - **Feed Mode + UI Visible** → Default state, all controls visible
 - **Full-Screen + UI Hidden** → Immersive viewing, just video
 - **Full-Screen + UI Visible** → Watching with info overlay
+- **Watch Party Lobby** → Waiting for participants, showing join code
 
 ## 🎬 Content Source
 
@@ -240,6 +257,10 @@ Right Action Bar:
 - ✅ Full-screen watch mode
 - ✅ Toggle UI visibility
 - ✅ Video playback controls
+- ✅ **Cross-platform Watch Party** (Roku ↔ Mobile ↔ Web)
+- ✅ Watch Party lobby with join codes
+- ✅ Synchronized playback across devices
+- ✅ Real-time participant tracking
 - ✅ Star rating system (placeholder)
 - ✅ Safe zone compliance
 - ✅ 10-foot viewing optimization
@@ -248,6 +269,7 @@ Right Action Bar:
 
 ## 🚀 Future Enhancements
 
+- [ ] Join Watch Party from Roku (currently create-only)
 - [ ] Implement full star rating UI (1-5 stars with selection)
 - [ ] Add Firebase authentication
 - [ ] Save user ratings to database
@@ -258,3 +280,41 @@ Right Action Bar:
 - [ ] More content sources (Vimeo, etc.)
 - [ ] Roku Channel Store submission
 - [ ] Fire TV port
+
+## 🎉 Watch Party Technical Details
+
+### Architecture
+- **Backend**: Firebase Cloud Functions (`us-central1-story-scout.cloudfunctions.net`)
+- **Database**: Firestore real-time sync
+- **Roku Implementation**: BrightScript Task nodes (background threading)
+- **Communication**: RESTful HTTP with JSON
+
+### Key Components
+**Roku Files:**
+- `components/WatchPartyTask.xml/brs` - Background HTTP operations
+- `components/MainScene.xml/brs` - UI and lobby management
+
+**API Endpoints:**
+- `POST /createWatchParty` - Host creates party, returns join code
+- `POST /joinWatchParty` - Participant joins with code
+- `GET /getWatchParty?code=XXX` - Poll for party state updates
+- `POST /updateWatchPartyState` - Host updates playback state
+
+### Debugging
+**Enable Roku logs:**
+```powershell
+# PowerShell (Windows)
+$client = New-Object System.Net.Sockets.TcpClient('192.168.x.x', 8085)
+$stream = $client.GetStream()
+$reader = New-Object System.IO.StreamReader($stream)
+while ($true) {
+    $line = $reader.ReadLine()
+    if ($line) { Write-Host $line }
+}
+```
+
+**Common Issues:**
+- **Font rendering**: Use default fonts or simple `color="0xFFFFFFFF"` format
+- **Thread violations**: All HTTP must use Task nodes (not roUrlTransfer on render thread)
+- **Label text not showing**: Check font is valid and color format is correct
+- **Observer timing**: Set `observeField()` BEFORE setting input fields or `control="RUN"`
