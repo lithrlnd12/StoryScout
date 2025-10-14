@@ -138,5 +138,99 @@
             horizAlign="center"
             font="font:LargeBoldSystemFont"
             color="#FFFFFF" />
+
+        <!-- Watch Party Menu Overlay -->
+        <Group id="watchPartyOverlay" translation="[0, 0]" visible="false">
+            <!-- Dark Overlay Background -->
+            <Rectangle
+                width="1920"
+                height="1080"
+                color="#000000"
+                opacity="0.8" />
+
+            <!-- Menu Card -->
+            <Group id="watchPartyMenu" translation="[660, 340]">
+                <!-- Menu Background -->
+                <Rectangle
+                    width="600"
+                    height="400"
+                    color="#1F2937" />
+
+                <!-- Title -->
+                <Label
+                    id="watchPartyTitle"
+                    text="Watch Party"
+                    translation="[0, 30]"
+                    width="600"
+                    height="60"
+                    horizAlign="center"
+                    font="font:LargeBoldSystemFont"
+                    color="#FFFFFF" />
+
+                <!-- Menu Options -->
+                <Group id="menuOptions" translation="[100, 120]">
+                    <!-- Create Party Option -->
+                    <Group id="createOption" translation="[0, 0]">
+                        <Rectangle
+                            id="createBg"
+                            width="400"
+                            height="70"
+                            color="#E91E63" />
+                        <Label
+                            text="🎬 Create Watch Party"
+                            translation="[0, 20]"
+                            width="400"
+                            height="70"
+                            horizAlign="center"
+                            font="font:MediumBoldSystemFont"
+                            color="#FFFFFF" />
+                    </Group>
+
+                    <!-- Join Party Option -->
+                    <Group id="joinOption" translation="[0, 90]">
+                        <Rectangle
+                            id="joinBg"
+                            width="400"
+                            height="70"
+                            color="#374151" />
+                        <Label
+                            text="🔗 Join Watch Party"
+                            translation="[0, 20]"
+                            width="400"
+                            height="70"
+                            horizAlign="center"
+                            font="font:MediumBoldSystemFont"
+                            color="#D1D5DB" />
+                    </Group>
+
+                    <!-- Cancel Option -->
+                    <Group id="cancelOption" translation="[0, 180]">
+                        <Rectangle
+                            id="cancelBg"
+                            width="400"
+                            height="70"
+                            color="#374151" />
+                        <Label
+                            text="Cancel"
+                            translation="[0, 20]"
+                            width="400"
+                            height="70"
+                            horizAlign="center"
+                            font="font:MediumBoldSystemFont"
+                            color="#8B92A8" />
+                    </Group>
+                </Group>
+
+                <!-- Helper Text -->
+                <Label
+                    text="↑↓ to navigate  •  OK to select"
+                    translation="[0, 350]"
+                    width="600"
+                    height="30"
+                    horizAlign="center"
+                    font="font:SmallSystemFont"
+                    color="#8B92A8" />
+            </Group>
+        </Group>
     </children>
 </component>

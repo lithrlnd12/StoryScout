@@ -277,7 +277,7 @@ export async function createWatchParty(
     hostUserId: userId,
     contentId: content.id,
     contentTitle: content.title,
-    videoUrl: content.trailerVideoId || content.trailerUrl || '',
+    videoUrl: content.fullContentVideoId || content.fullContentUrl || content.trailerVideoId || content.trailerUrl || '',
     status: 'waiting',
     currentTime: 0,
     lastSync: Timestamp.now(),

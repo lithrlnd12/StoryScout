@@ -8,6 +8,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/452001751-9f9771d5f052c718a1dc44cc979f409d1e4c3438be297b7b69046180acd6a402-d_640x360.jpg",
     "creator": "Quantum Studios",
     "likes": 12000,
+    "shares": 3200,
+    "reviews": 856,
+    "averageRating": 4.5,
     "vimeoCategories": [
       "technology",
       "documentary",
@@ -23,6 +26,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/591838660-158b6cedcd9f2c2d80a3c6329a2b805d6e7ca3a0655e768f8b51006979cd13a2-d_640x360.jpg",
     "creator": "Elevate Films",
     "likes": 8600,
+    "shares": 2100,
+    "reviews": 624,
+    "averageRating": 4.3,
     "vimeoCategories": [
       "education",
       "documentary",
@@ -38,6 +44,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/590595366-37d94b691f0fe58f16c3be8a0879b75d53378eaefdd8f2fa2a3434a9aa8920dd-d_640x360.jpg",
     "creator": "Nebula Network",
     "likes": 9400,
+    "shares": 2700,
+    "reviews": 712,
+    "averageRating": 4.6,
     "vimeoCategories": [
       "scifi",
       "technology",
@@ -53,6 +62,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/795703423-ff8c905b1d0f53cd5323bfeaec75fbab28a309c7acfaf341244262ecb00436b7-d_640x360.jpg",
     "creator": "Blue Current",
     "likes": 5400,
+    "shares": 1458,
+    "reviews": 432,
+    "averageRating": 4.7,
     "vimeoCategories": [
       "documentary",
       "environment",
@@ -68,6 +80,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/900708072-981f69e5b8567538d969a637ebf7d2a01cb017a2ff4bac1123a7b43d68f360f4-d_640x360.jpg",
     "creator": "Punchline Collective",
     "likes": 6200,
+    "shares": 1674,
+    "reviews": 496,
+    "averageRating": 4.2,
     "vimeoCategories": [
       "comedy",
       "shortfilms"
@@ -82,6 +97,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/319465568-4e19524531db3dfd80cd3547b16a3a836b6b5480db0226447c0f2e2f3195e4a6-d_640x360.jpg",
     "creator": "Night Shift",
     "likes": 7100,
+    "shares": 1917,
+    "reviews": 568,
+    "averageRating": 4.4,
     "vimeoCategories": [
       "horror",
       "thriller",
@@ -97,6 +115,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/686418830-2a1c07da3f6b1a2d2dbf33874e785d40c9c24f9df5cfc01c908db8b27c12075f-d_640x360.jpg",
     "creator": "Upbuild",
     "likes": 4300,
+    "shares": 1161,
+    "reviews": 344,
+    "averageRating": 4.6,
     "vimeoCategories": [
       "lifestyle",
       "documentary",
@@ -112,6 +133,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/762382066-d71fb61f7ee80440f6f8461ce5b870bbcb976a83f0e02aa527969b5cb364a7fe-d_640x360.jpg",
     "creator": "City Sessions",
     "likes": 5100,
+    "shares": 1377,
+    "reviews": 408,
+    "averageRating": 4.5,
     "vimeoCategories": [
       "music",
       "documentary"
@@ -126,6 +150,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/536893406-779ae06cfaf87cbf17791c39dcdad887ce835573b8bbe0a0f2fbccd4988f44c0-d_640x360.jpg",
     "creator": "Gravity Film",
     "likes": 6800,
+    "shares": 1836,
+    "reviews": 544,
+    "averageRating": 4.7,
     "vimeoCategories": [
       "sports",
       "inspiration"
@@ -140,6 +167,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/284192696-f8f6250cc0d2d9c3af8e1af82d59ddf78aebb59dd0d7c932a0b5014a4f14f7a6-d_640x360.jpg",
     "creator": "Orbit Studio",
     "likes": 3900,
+    "shares": 1053,
+    "reviews": 312,
+    "averageRating": 4.8,
     "vimeoCategories": [
       "animation",
       "family",
@@ -155,6 +185,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/452001751-9f9771d5f052c718a1dc44cc979f409d1e4c3438be297b7b69046180acd6a402-d_640x360.jpg",
     "creator": "Future Minds",
     "likes": 4700,
+    "shares": 1269,
+    "reviews": 376,
+    "averageRating": 4.4,
     "vimeoCategories": [
       "education",
       "technology",
@@ -170,6 +203,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/701483648-24ccf0b8f58bd2d96ff47568cf8127781d78b81008b39cae4b8edff6f9fd1901-d_640x360.jpg",
     "creator": "Lightline",
     "likes": 5600,
+    "shares": 1512,
+    "reviews": 448,
+    "averageRating": 4.3,
     "vimeoCategories": [
       "romance",
       "shortfilms"
@@ -184,6 +220,9 @@
     "thumbnailUrl": "https://i.vimeocdn.com/video/176289830-5b10a025c27515c8606610951fd44aa2bf5786e680cc094664b06fe9ad975c02-d_640x360.jpg",
     "creator": "Firewall Films",
     "likes": 6200,
+    "shares": 1674,
+    "reviews": 496,
+    "averageRating": 4.5,
     "vimeoCategories": [
       "thriller",
       "technology"

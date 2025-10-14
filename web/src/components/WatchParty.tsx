@@ -38,6 +38,8 @@ export default function WatchPartyComponent({
   const [party, setParty] = useState<WatchParty | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previousParticipantCount, setPreviousParticipantCount] = useState(0);
+  const [joinNotification, setJoinNotification] = useState<string | null>(null);
 
   // Use external showMenu if provided, otherwise use internal state
   const showMenu = externalShowMenu !== undefined ? externalShowMenu : internalShowMenu;
@@ -58,16 +60,36 @@ export default function WatchPartyComponent({
         return;
       }
 
+      // Notify host when someone joins and ensure modal is open
+      if (isHost && updatedParty.participants.length > previousParticipantCount) {
+        const newParticipant = updatedParty.participants[updatedParty.participants.length - 1];
+        // Keep modal open so host can see the Start button
+        setShowCreateModal(true);
+        // Show notification banner
+        setJoinNotification(`${newParticipant.displayName} joined!`);
+        // Auto-hide notification after 3 seconds
+        setTimeout(() => setJoinNotification(null), 3000);
+      }
+      setPreviousParticipantCount(updatedParty.participants.length);
+
       setParty(updatedParty);
       syncVideoWithParty(updatedParty);
     });
 
     return unsubscribe;
-  }, [party?.id]);
+  }, [party?.id, isHost, previousParticipantCount]);
 
   // Sync video playback with party state
   const syncVideoWithParty = (partyState: WatchParty) => {
-    if (!videoRef.current || isHost) return; // Host controls their own playback
+    // If party just started playing, navigate EVERYONE to the full movie
+    if (partyState.status === 'playing' && partyState.videoUrl && onWatchFullMovie) {
+      console.log('Party started! Navigating to full movie:', partyState.videoUrl);
+      onWatchFullMovie(partyState.videoUrl);
+      return;
+    }
+
+    // For ongoing playback sync (participants only)
+    if (isHost || !videoRef.current) return;
 
     const video = videoRef.current;
 
@@ -125,6 +147,7 @@ export default function WatchPartyComponent({
 
       setParty(newParty);
       setIsHost(true);
+      setPreviousParticipantCount(1); // Initialize with host count
       setShowCreateModal(true);
       setShowMenu(false);
       onPartyStateChange?.(true);
@@ -155,17 +178,14 @@ export default function WatchPartyComponent({
 
       setParty(joinedParty);
       setIsHost(false);
+      setPreviousParticipantCount(joinedParty.participants.length);
       setShowJoinModal(false);
       setShowMenu(false);
       setJoinCode('');
+      setShowCreateModal(true); // Show party details for participants too
       onPartyStateChange?.(true);
 
-      // Auto-start full movie
-      if (joinedParty.videoUrl && onWatchFullMovie) {
-        onWatchFullMovie(joinedParty.videoUrl);
-      }
-
-      alert(`Joined party: ${joinedParty.contentTitle}`);
+      alert(`Joined party: ${joinedParty.contentTitle}\nWaiting for host to start...`);
     } catch (err: any) {
       setError(err.message || 'Failed to join party');
       alert(err.message || 'Failed to join party');
@@ -212,6 +232,25 @@ export default function WatchPartyComponent({
       }
     } catch (err) {
       console.error('Error sharing:', err);
+    }
+  };
+
+  const handleStartWatchParty = async () => {
+    if (!party || !isHost) return;
+
+    try {
+      // Start the full movie for everyone
+      await updateWatchPartyState(party.id, 'playing', 0);
+
+      // Navigate to full movie view
+      if (party.videoUrl && onWatchFullMovie) {
+        onWatchFullMovie(party.videoUrl);
+      }
+
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error('Error starting watch party:', err);
+      alert('Failed to start watch party');
     }
   };
 
@@ -313,6 +352,14 @@ export default function WatchPartyComponent({
               {party.contentTitle}
             </p>
 
+            {/* Join Notification Banner */}
+            {joinNotification && isHost && (
+              <div style={notificationBannerStyle}>
+                <span style={{ fontSize: 20, marginRight: 8 }}>👋</span>
+                {joinNotification}
+              </div>
+            )}
+
             {/* Join Code */}
             <div style={codeContainerStyle}>
               <p style={codeLabelStyle}>JOIN CODE</p>
@@ -355,6 +402,13 @@ export default function WatchPartyComponent({
                  party.status === 'paused' ? 'Paused' : 'Waiting'}
               </span>
             </div>
+
+            {/* Start Watch Party Button (Host Only, when status is 'waiting') */}
+            {isHost && party.status === 'waiting' && (
+              <button style={startButtonStyle} onClick={handleStartWatchParty}>
+                ▶️ Start Watch Party
+              </button>
+            )}
 
             {/* Leave Button */}
             <button style={leaveButtonStyle} onClick={handleLeaveParty}>
@@ -519,6 +573,19 @@ const primaryButtonStyle: React.CSSProperties = {
   cursor: 'pointer'
 };
 
+const startButtonStyle: React.CSSProperties = {
+  width: '100%',
+  backgroundColor: tokens.accentCyan,
+  border: 'none',
+  padding: 16,
+  borderRadius: 24,
+  color: tokens.textPrimary,
+  fontSize: 18,
+  fontWeight: 700,
+  cursor: 'pointer',
+  marginBottom: 12
+};
+
 const leaveButtonStyle: React.CSSProperties = {
   width: '100%',
   backgroundColor: tokens.error,
@@ -536,4 +603,16 @@ const errorTextStyle: React.CSSProperties = {
   fontSize: 14,
   textAlign: 'center',
   marginBottom: 16
+};
+
+const notificationBannerStyle: React.CSSProperties = {
+  backgroundColor: tokens.accentCyan,
+  color: tokens.textPrimary,
+  padding: '12px 20px',
+  borderRadius: 12,
+  marginBottom: 20,
+  textAlign: 'center',
+  fontWeight: 600,
+  fontSize: 16,
+  animation: 'slideIn 0.3s ease-out'
 };

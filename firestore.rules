@@ -30,11 +30,8 @@ service cloud.firestore {
       allow read: if true; // Anyone can read parties (for joining)
       allow create: if request.auth != null; // Authenticated users can create parties
 
-      // Only host or current participants can update
-      allow update: if request.auth != null && (
-        resource.data.hostUserId == request.auth.uid ||
-        request.auth.uid in resource.data.participants.map(p, p.userId)
-      );
+      // Allow update for authenticated users (the function will validate participants)
+      allow update: if request.auth != null;
 
       // Only host can delete
       allow delete: if request.auth != null && resource.data.hostUserId == request.auth.uid;

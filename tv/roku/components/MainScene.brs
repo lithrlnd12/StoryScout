@@ -16,6 +16,12 @@ sub init()
     m.engagementBar = m.top.findNode("engagementBar")
     m.navHint = m.top.findNode("navHint")
 
+    ' Watch Party UI elements
+    m.watchPartyOverlay = m.top.findNode("watchPartyOverlay")
+    m.createBg = m.top.findNode("createBg")
+    m.joinBg = m.top.findNode("joinBg")
+    m.cancelBg = m.top.findNode("cancelBg")
+
     ' Initialize state
     m.currentIndex = 0
     m.isMuted = true
@@ -26,6 +32,23 @@ sub init()
     m.genrePills = []
     m.isFullScreen = false
     m.isUIVisible = true
+
+    ' Watch Party state
+    m.watchPartyActive = false
+    m.isPartyHost = false
+    m.partyCode = ""
+    m.showWatchPartyMenu = false
+    m.showJoinKeyboard = false
+    m.joinCodeInput = ""
+    m.keyboardCursorPos = 0
+    m.watchPartyMenuSelection = 0
+
+    ' Firebase Cloud Functions base URL
+    m.apiBaseUrl = "https://us-central1-story-scout.cloudfunctions.net"
+
+    ' Message port for async HTTP requests
+    m.port = createObject("roMessagePort")
+    m.top.observeField("port", "onHttpResponse")
 
     ' Observe content data
     m.top.observeField("contentData", "onContentDataChanged")
@@ -233,6 +256,12 @@ end function
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
 
+    ' Watch Party Menu is open - handle menu navigation
+    if m.showWatchPartyMenu then
+        handleWatchPartyMenuNav(key)
+        return true
+    end if
+
     ' Full-screen mode behavior
     if m.isFullScreen then
         if key = "OK" then
@@ -295,7 +324,11 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         loadCurrentVideo()
         return true
     else if key = "options" or key = "*" then
-        ' Open star rating overlay
+        ' Open watch party menu
+        openWatchPartyMenu()
+        return true
+    else if key = "replay" then
+        ' Open star rating overlay (moved from options key)
         openStarRating()
         return true
     else if key = "OK" then
@@ -381,4 +414,187 @@ end sub
 
 sub hideRatingMessage()
     m.statusLabel.visible = false
+end sub
+
+' ============================================================================
+' WATCH PARTY FUNCTIONS
+' ============================================================================
+
+sub openWatchPartyMenu()
+    m.showWatchPartyMenu = true
+    m.watchPartyMenuSelection = 0
+    m.watchPartyOverlay.visible = true
+    updateWatchPartyMenuSelection()
+end sub
+
+sub closeWatchPartyMenu()
+    m.showWatchPartyMenu = false
+    m.watchPartyOverlay.visible = false
+end sub
+
+sub updateWatchPartyMenuSelection()
+    ' Reset all to unselected state
+    m.createBg.color = "#374151"
+    m.joinBg.color = "#374151"
+    m.cancelBg.color = "#374151"
+
+    ' Highlight selected option
+    if m.watchPartyMenuSelection = 0 then
+        m.createBg.color = "#E91E63"
+    else if m.watchPartyMenuSelection = 1 then
+        m.joinBg.color = "#E91E63"
+    else if m.watchPartyMenuSelection = 2 then
+        m.cancelBg.color = "#E91E63"
+    end if
+end sub
+
+sub handleWatchPartyMenuNav(key as String)
+    if key = "up" then
+        m.watchPartyMenuSelection = m.watchPartyMenuSelection - 1
+        if m.watchPartyMenuSelection < 0 then
+            m.watchPartyMenuSelection = 2
+        end if
+        updateWatchPartyMenuSelection()
+    else if key = "down" then
+        m.watchPartyMenuSelection = m.watchPartyMenuSelection + 1
+        if m.watchPartyMenuSelection > 2 then
+            m.watchPartyMenuSelection = 0
+        end if
+        updateWatchPartyMenuSelection()
+    else if key = "OK" then
+        if m.watchPartyMenuSelection = 0 then
+            ' Create Party
+            closeWatchPartyMenu()
+            createWatchParty()
+        else if m.watchPartyMenuSelection = 1 then
+            ' Join Party - TODO: Show keyboard
+            closeWatchPartyMenu()
+            m.statusLabel.text = "Join Party - Keyboard Coming Soon!"
+            m.statusLabel.visible = true
+        else if m.watchPartyMenuSelection = 2 then
+            ' Cancel
+            closeWatchPartyMenu()
+        end if
+    else if key = "back" then
+        closeWatchPartyMenu()
+    end if
+end sub
+
+sub createWatchParty()
+    if m.filteredContent.count() = 0 then return
+
+    ' Temporary: Just generate local code for testing
+    chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    code = ""
+    for i = 0 to 5
+        randomIndex = Int(Rnd(0) * chars.len())
+        code = code + Mid(chars, randomIndex, 1)
+    end for
+
+    m.partyCode = code
+    m.isPartyHost = true
+    m.watchPartyActive = true
+    m.statusLabel.text = "Party Code: " + m.partyCode
+    m.statusLabel.visible = true
+    print "Created watch party with code: " + m.partyCode
+
+    ' TODO: Re-enable Firebase integration after fixing UI freeze
+end sub
+
+sub checkCreateResponse()
+    msg = m.port.getMessage()
+    if msg <> invalid and type(msg) = "roUrlEvent"
+        m.createTimer.control = "stop"
+        responseCode = msg.GetResponseCode()
+        if responseCode = 200
+            responseStr = msg.GetString()
+            response = ParseJson(responseStr)
+            if response <> invalid and response.success = true and response.code <> invalid
+                m.partyCode = response.code
+                m.isPartyHost = true
+                m.watchPartyActive = true
+                m.statusLabel.text = "Party Code: " + m.partyCode
+                m.statusLabel.visible = true
+                print "Created watch party with code: " + m.partyCode
+            else
+                m.statusLabel.text = "Failed to create party"
+                m.statusLabel.visible = true
+            end if
+        else
+            m.statusLabel.text = "Network Error: " + responseCode.toStr()
+            m.statusLabel.visible = true
+        end if
+    end if
+end sub
+
+sub joinWatchParty(code as String)
+    ' Show joining message
+    m.statusLabel.text = "Joining party..."
+    m.statusLabel.visible = true
+
+    ' Create HTTP request to Firebase Cloud Function (async, non-blocking)
+    request = createObject("roUrlTransfer")
+    request.SetUrl(m.apiBaseUrl + "/joinWatchParty")
+    request.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    request.InitClientCertificates()
+    request.EnablePeerVerification(false)
+    request.EnableHostVerification(false)
+    request.AddHeader("Content-Type", "application/json")
+
+    ' Generate unique user ID for Roku (using device ID)
+    deviceInfo = createObject("roDeviceInfo")
+    userId = "roku_" + deviceInfo.GetChannelClientId()
+
+    ' Prepare request body
+    body = {
+        code: code,
+        userId: userId,
+        displayName: "Roku User",
+        platform: "roku"
+    }
+
+    ' Send async request (non-blocking)
+    request.SetMessagePort(m.port)
+    m.joinRequest = request
+    if request.AsyncPostFromString(FormatJson(body))
+        print "Watch party join request sent for code: " + code
+        ' Timer to check response
+        m.joinTimer = createObject("roSGNode", "Timer")
+        m.joinTimer.duration = 0.5
+        m.joinTimer.repeat = true
+        m.joinTimer.observeField("fire", "checkJoinResponse")
+        m.joinTimer.control = "start"
+    else
+        m.statusLabel.text = "Failed to send request"
+        m.statusLabel.visible = true
+    end if
+end sub
+
+sub checkJoinResponse()
+    msg = m.port.getMessage()
+    if msg <> invalid and type(msg) = "roUrlEvent"
+        m.joinTimer.control = "stop"
+        responseCode = msg.GetResponseCode()
+        if responseCode = 200
+            responseStr = msg.GetString()
+            response = ParseJson(responseStr)
+            if response <> invalid and response.success = true
+                m.partyCode = response.party.code
+                m.isPartyHost = false
+                m.watchPartyActive = true
+                m.statusLabel.text = "Joined party: " + m.partyCode
+                m.statusLabel.visible = true
+                print "Joined watch party: " + m.partyCode
+            else
+                m.statusLabel.text = "Party not found"
+                m.statusLabel.visible = true
+            end if
+        else if responseCode = 404
+            m.statusLabel.text = "Party not found"
+            m.statusLabel.visible = true
+        else
+            m.statusLabel.text = "Network Error: " + responseCode.toStr()
+            m.statusLabel.visible = true
+        end if
+    end if
 end sub
