@@ -30,7 +30,7 @@ type WatchPartyProps = {
   videoRef: React.MutableRefObject<Video | null>;
   showMenu?: boolean;
   onMenuClose?: () => void;
-  onPartyStateChange?: (inParty: boolean) => void;
+  onPartyStateChange?: (inParty: boolean, partyId?: string) => void;
   onWatchFullMovie?: (videoUrl: string) => void;
 };
 
@@ -221,7 +221,7 @@ export default function WatchPartyComponent({
       setPreviousParticipantCount(1); // Initialize with host count
       setShowCreateModal(true);
       setShowMenu(false);
-      onPartyStateChange?.(true);
+      onPartyStateChange?.(true, newParty.id);
     } catch (err: any) {
       setError(err.message || 'Failed to create party');
       Alert.alert('Error', err.message || 'Failed to create party');
@@ -254,7 +254,7 @@ export default function WatchPartyComponent({
       setShowMenu(false);
       setJoinCode('');
       setShowCreateModal(true); // Show lobby for guests
-      onPartyStateChange?.(true);
+      onPartyStateChange?.(true, joinedParty.id);
 
       // Don't auto-start - guest stays in lobby modal and sees "Waiting for host..."
     } catch (err: any) {
@@ -785,5 +785,19 @@ const styles = StyleSheet.create({
     color: tokens.textSecondary,
     marginBottom: 12,
     fontSize: 14
+  },
+  chatOverlay: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 16,
+    padding: 16,
+    zIndex: 10000
+  },
+  chatText: {
+    color: tokens.textPrimary,
+    fontSize: 14,
+    fontWeight: '600'
   }
 });

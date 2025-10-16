@@ -101,6 +101,11 @@ export default function App() {
   const [isGloballyMuted, setIsGloballyMuted] = useState(true);
   const [currentContent, setCurrentContent] = useState<TrailerDoc | null>(null);
   const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
+  const [activePartyId, setActivePartyId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
+  const chatIntervalRef = useRef<any>(null);
   const listRef = useRef<FlatList<TrailerDoc>>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
@@ -291,6 +296,69 @@ export default function App() {
   const truncateTitle = (text: string, maxLength: number = 40) => {
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
+  };
+
+  // Fetch chat messages when party is active
+  useEffect(() => {
+    if (!activePartyId) {
+      if (chatIntervalRef.current) {
+        clearInterval(chatIntervalRef.current);
+        chatIntervalRef.current = null;
+      }
+      setChatMessages([]);
+      return;
+    }
+
+    const fetchMessages = async () => {
+      try {
+        const response = await fetch(
+          `https://us-central1-story-scout.cloudfunctions.net/getChatMessages?partyCode=${activePartyId}&limit=50`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setChatMessages(data.messages || []);
+        }
+      } catch (err) {
+        console.error('Error fetching chat:', err);
+      }
+    };
+
+    fetchMessages();
+    chatIntervalRef.current = setInterval(fetchMessages, 2000);
+
+    return () => {
+      if (chatIntervalRef.current) {
+        clearInterval(chatIntervalRef.current);
+        chatIntervalRef.current = null;
+      }
+    };
+  }, [activePartyId]);
+
+  const handleSendChat = async () => {
+    if (!activePartyId || !chatInput.trim() || sendingChat || !user) return;
+
+    setSendingChat(true);
+    const message = chatInput.trim();
+    setChatInput('');
+
+    try {
+      await fetch('https://us-central1-story-scout.cloudfunctions.net/sendChatMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partyCode: activePartyId,
+          userId: user.uid,
+          displayName: user.email || 'Anonymous',
+          platform: 'mobile',
+          message
+        })
+      });
+    } catch (err) {
+      console.error('Error sending chat:', err);
+      setChatInput(message);
+    } finally {
+      setSendingChat(false);
+    }
   };
 
   // Load user engagement state when feed changes
@@ -569,6 +637,94 @@ export default function App() {
             useNativeControls
             isMuted={false}
           />
+
+          {/* TikTok-Style Chat Overlay */}
+          {activePartyId && (
+            <View style={{
+              position: 'absolute',
+              right: 20,
+              bottom: 80,
+              height: 200,
+              width: 280,
+              zIndex: 10000
+            }}>
+              {/* Messages */}
+              <ScrollView
+                style={{ flex: 1, marginBottom: 12 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {chatMessages.slice(-10).map((msg: any, idx: number) => {
+                  const isOwnMessage = user && msg.userId === user.uid;
+                  return (
+                    <View key={idx} style={{
+                      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                      borderRadius: 16,
+                      padding: 10,
+                      marginBottom: 8
+                    }}>
+                      <Text style={{
+                        color: isOwnMessage ? tokens.accentCyan : tokens.accentMagenta,
+                        fontSize: 12,
+                        fontWeight: '700',
+                        marginBottom: 2
+                      }}>
+                        {msg.displayName}
+                      </Text>
+                      <Text style={{
+                        color: tokens.textPrimary,
+                        fontSize: 14
+                      }}>
+                        {msg.message}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Input */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                borderRadius: 24,
+                paddingHorizontal: 16,
+                paddingVertical: 10
+              }}>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    color: tokens.textPrimary,
+                    fontSize: 14,
+                    marginRight: 8
+                  }}
+                  placeholder="Say something..."
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  value={chatInput}
+                  onChangeText={setChatInput}
+                  onSubmitEditing={handleSendChat}
+                  returnKeyType="send"
+                  editable={!sendingChat}
+                />
+                <TouchableOpacity
+                  onPress={handleSendChat}
+                  disabled={sendingChat || !chatInput.trim()}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: tokens.accentCyan,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: (sendingChat || !chatInput.trim()) ? 0.5 : 1
+                  }}
+                >
+                  <Text style={{ color: tokens.textPrimary, fontSize: 18, fontWeight: '700' }}>
+                    {sendingChat ? '...' : '→'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
     );
@@ -621,8 +777,9 @@ export default function App() {
         videoRef={{ current: currentContent ? videoRefs.current[currentContent.id] || null : null }}
         showMenu={showWatchPartyMenu}
         onMenuClose={() => setShowWatchPartyMenu(false)}
-        onPartyStateChange={(inParty) => {
-          console.log('[App] Watch party state changed:', inParty);
+        onPartyStateChange={(inParty, partyId) => {
+          console.log('[App] Watch party state changed:', inParty, 'Party ID:', partyId);
+          setActivePartyId(inParty ? partyId || null : null);
         }}
         onWatchFullMovie={(videoUrl) => {
           console.log('[App] onWatchFullMovie called with:', videoUrl);

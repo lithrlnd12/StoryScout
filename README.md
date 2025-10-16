@@ -52,6 +52,7 @@ node web/upload-archive-content.mjs
 ```bash
 cd mobile
 npm start
+# Opens Expo dev server with tunnel mode (for WSL compatibility)
 # Scan QR code with Expo Go app on your phone
 ```
 
@@ -98,13 +99,17 @@ storyscout/
 ### Mobile (iOS/Android)
 ```bash
 cd mobile
-npm start              # Start Expo dev server (works with Expo Go)
+npm start              # Start Expo dev server with tunnel mode & cache clearing
 
 # For Expo Go (Recommended - No build required):
 # 1. Install "Expo Go" app from App Store (iOS) or Play Store (Android)
 # 2. Run 'npm start' from mobile directory
 # 3. Scan QR code with Expo Go app
 # 4. App loads instantly - no Xcode or Android Studio needed!
+
+# Note: npm start uses './node_modules/.bin/expo start --clear --tunnel'
+# - --clear: Prevents Metro bundler cache issues
+# - --tunnel: Enables WSL networking support for Windows users
 
 # For native builds (Advanced - Only if you need custom native modules):
 npm run android        # Build and run on Android device/emulator
@@ -210,7 +215,12 @@ VITE_FIREBASE_PROJECT_ID=story-scout
   - Mobile & Web: Real-time Firebase sync
   - Roku: REST API polling for sync state
 - **Auto-Join Full Movie**: Guests automatically start the full movie when joining a party
-- **Live Chat Overlay**: TikTok-style transparent chat column on web that floats above the video without blocking transport controls
+- **Live Chat Overlay**: TikTok-style transparent chat that floats above the video without blocking controls
+  - **Web**: Transparent chat column on right side of fullscreen video
+  - **Mobile**: Chat overlay in bottom 20-25% of screen during fullscreen playback
+  - **Color-Coded Messages**: Cyan for your messages, magenta for others
+  - **Real-Time Sync**: Messages poll every 2 seconds, synced across all platforms
+  - **Cross-Platform**: Chat works between mobile, web, and Roku users
 
 ### Engagement System
 - **TikTok-Style Interactions**: Vertical engagement bar with likes, reviews, and shares
