@@ -28,9 +28,10 @@ type WatchPartyProps = {
   videoRef: React.MutableRefObject<HTMLVideoElement | null>;
   showMenu?: boolean;
   onMenuClose?: () => void;
-  onPartyStateChange?: (inParty: boolean) => void;
+  onPartyStateChange?: (inParty: boolean, partyId?: string) => void;
   onWatchFullMovie?: (videoUrl: string) => void;
   overlayRoot?: HTMLElement | null;
+  partyId?: string | null; // Allow parent to pass in party ID to maintain across view transitions
 };
 
 export default function WatchPartyComponent({
@@ -41,7 +42,8 @@ export default function WatchPartyComponent({
   onMenuClose,
   onPartyStateChange,
   onWatchFullMovie,
-  overlayRoot
+  overlayRoot,
+  partyId: externalPartyId
 }: WatchPartyProps) {
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -69,6 +71,31 @@ export default function WatchPartyComponent({
     ? (value: boolean) => { if (!value) onMenuClose(); }
     : setInternalShowMenu;
 
+  // Subscribe to party using externalPartyId (if provided by parent)
+  useEffect(() => {
+    if (!externalPartyId || party?.id === externalPartyId) return;
+
+    console.log('[WatchParty] Subscribing to external party ID:', externalPartyId);
+
+    const unsubscribe = subscribeToWatchParty(externalPartyId, (updatedParty) => {
+      if (!updatedParty) {
+        console.log('[WatchParty] External party ended');
+        setParty(null);
+        setIsHost(false);
+        onPartyStateChange?.(false);
+        return;
+      }
+
+      console.log('[WatchParty] External party updated:', updatedParty.status);
+      setParty(updatedParty);
+      setIsHost(updatedParty.hostUserId === user.uid);
+      setPreviousParticipantCount(updatedParty.participants.length);
+      syncVideoWithParty(updatedParty);
+    });
+
+    return unsubscribe;
+  }, [externalPartyId, user.uid]);
+
   // Subscribe to party updates
   useEffect(() => {
     if (!party) return;
@@ -78,7 +105,7 @@ export default function WatchPartyComponent({
         // Party ended
         setParty(null);
         setIsHost(false);
-        onPartyStateChange?.(false);
+        onPartyStateChange?.(false, undefined);
         return;
       }
 
@@ -104,12 +131,18 @@ export default function WatchPartyComponent({
   useEffect(() => {
     if (!party) {
       autoOpenedChatRef.current = false;
+      setShowChat(false);
+      console.log('[WatchParty] No party, hiding chat');
       return;
     }
 
-    if (party.status === 'playing' && !autoOpenedChatRef.current) {
+    // Auto-show and keep chat open when party is playing
+    if (party.status === 'playing') {
+      console.log('[WatchParty] Party is playing, showing chat!');
       setShowChat(true);
       autoOpenedChatRef.current = true;
+    } else {
+      console.log('[WatchParty] Party status:', party.status);
     }
   }, [party?.status, party]);
 
@@ -202,7 +235,7 @@ export default function WatchPartyComponent({
       setPreviousParticipantCount(1); // Initialize with host count
       setShowCreateModal(true);
       setShowMenu(false);
-      onPartyStateChange?.(true);
+      onPartyStateChange?.(true, newParty.id);
     } catch (err: any) {
       setError(err.message || 'Failed to create party');
       alert(err.message || 'Failed to create party');
@@ -235,7 +268,7 @@ export default function WatchPartyComponent({
       setShowMenu(false);
       setJoinCode('');
       setShowCreateModal(true); // Show lobby for guests
-      onPartyStateChange?.(true);
+      onPartyStateChange?.(true, joinedParty.id);
 
       // Don't show alert - guest stays in lobby modal and sees "Waiting for host..."
     } catch (err: any) {
@@ -260,7 +293,7 @@ export default function WatchPartyComponent({
       setParty(null);
       setIsHost(false);
       setShowCreateModal(false);
-      onPartyStateChange?.(false);
+      onPartyStateChange?.(false, undefined);
     } catch (err) {
       console.error('Error leaving party:', err);
     }
@@ -566,24 +599,10 @@ export default function WatchPartyComponent({
         </div>
       )}
 
-      {/* Chat Toggle Button (TikTok-style, appears when in party) */}
-      {party && !showMenu && !showJoinModal && typeof document !== 'undefined' &&
-        createPortal(
-          <button
-            style={chatToggleButtonStyle}
-            onClick={() => setShowChat(!showChat)}
-          >
-            💬 {showChat ? 'Hide Chat' : 'Chat'}
-            {messages.length > 0 && !showChat && (
-              <span style={chatBadgeStyle}>{messages.length}</span>
-            )}
-          </button>,
-          overlayRoot ?? document.body
-        )}
-
-      {/* TikTok-Style Chat Overlay */}
-      {party && showChat && typeof document !== 'undefined' &&
-        createPortal(
+      {/* TikTok-Style Chat Overlay (Persistent, no toggle button) */}
+      {party && showChat && typeof document !== 'undefined' && (
+        overlayRoot === null ? (
+          // Render inline when overlayRoot is null (fullscreen video mode)
           <>
             <div style={chatMessageStackStyle}>
               {messages.length === 0 ? (
@@ -634,9 +653,65 @@ export default function WatchPartyComponent({
                 ➤
               </button>
             </div>
-          </>,
-          overlayRoot ?? document.body
-        )}
+          </>
+        ) : overlayRoot ? (
+          // Use portal when overlayRoot is provided (feed view mode)
+          createPortal(
+            <>
+              <div style={chatMessageStackStyle}>
+                {messages.length === 0 ? (
+                  <p style={chatEmptyTextStyle}>No messages yet. Say hi! 👋</p>
+                ) : (
+                  messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      style={{
+                        ...chatMessageRowStyle,
+                        justifyContent: msg.userId === user.uid ? 'flex-end' : 'flex-start'
+                      }}
+                    >
+                      <span style={chatHandleStyle}>{msg.displayName}</span>
+                      <span
+                        style={{
+                          ...chatMessageChipStyle,
+                          backgroundColor: msg.userId === user.uid
+                            ? 'rgba(255, 20, 147, 0.5)'
+                            : 'rgba(0, 0, 0, 0.55)'
+                        }}
+                      >
+                        {msg.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              <div style={chatInputDockStyle}>
+                <input
+                  type="text"
+                  style={chatInputStyle}
+                  placeholder="Send a message"
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  maxLength={200}
+                />
+                <button
+                  style={{
+                    ...chatSendButtonStyle,
+                    opacity: sendingMessage || !messageInput.trim() ? 0.5 : 1
+                  }}
+                  onClick={sendMessage}
+                  disabled={sendingMessage || !messageInput.trim()}
+                >
+                  ➤
+                </button>
+              </div>
+            </>,
+            overlayRoot
+          )
+        ) : null
+      )}
     </>
   );
 }
@@ -837,43 +912,9 @@ const notificationBannerStyle: React.CSSProperties = {
   animation: 'slideIn 0.3s ease-out'
 };
 
-// Chat Styles (TikTok-inspired)
-const chatToggleButtonStyle: React.CSSProperties = {
-  position: 'fixed',
-  bottom: '18vh',
-  right: 28,
-  backgroundColor: 'rgba(255, 20, 147, 0.9)',
-  border: 'none',
-  borderRadius: 999,
-  padding: '12px 22px',
-  color: tokens.textPrimary,
-  fontSize: 15,
-  fontWeight: 600,
-  cursor: 'pointer',
-  boxShadow: '0 12px 28px rgba(0, 0, 0, 0.35)',
-  zIndex: 2147483647,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  pointerEvents: 'auto',
-  backdropFilter: 'blur(10px)'
-};
-
-const chatBadgeStyle: React.CSSProperties = {
-  backgroundColor: tokens.error,
-  borderRadius: '50%',
-  width: 22,
-  height: 22,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 11,
-  fontWeight: 700,
-  marginLeft: 6
-};
-
+// Chat Styles (TikTok-inspired) - Persistent overlay without toggle
 const chatMessageStackStyle: React.CSSProperties = {
-  position: 'fixed',
+  position: 'absolute', // Changed from fixed to absolute for video overlay
   top: '18vh',
   right: 24,
   width: 'min(300px, 32vw)',
@@ -888,7 +929,7 @@ const chatMessageStackStyle: React.CSSProperties = {
   textShadow: '0 2px 8px rgba(0,0,0,0.65)',
   fontSize: 14,
   lineHeight: 1.35,
-  zIndex: 2147483647,
+  zIndex: 10001, // Above video but below modals
   padding: '4px 8px',
   borderRadius: 18,
   background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%)'
@@ -927,7 +968,7 @@ const chatEmptyTextStyle: React.CSSProperties = {
 };
 
 const chatInputDockStyle: React.CSSProperties = {
-  position: 'fixed',
+  position: 'absolute', // Changed from fixed to absolute for video overlay
   bottom: '16vh',
   right: 24,
   width: 'min(300px, 32vw)',
@@ -940,7 +981,7 @@ const chatInputDockStyle: React.CSSProperties = {
   padding: '8px 12px',
   border: '1px solid rgba(255,255,255,0.15)',
   backdropFilter: 'blur(14px)',
-  zIndex: 2147483647
+  zIndex: 10001 // Above video but below modals
 };
 
 const chatInputStyle: React.CSSProperties = {

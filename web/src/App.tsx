@@ -67,9 +67,11 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isGloballyMuted, setIsGloballyMuted] = useState(true); // Global mute state
   const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
+  const [activePartyId, setActivePartyId] = useState<string | null>(null); // Track active party ID
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const fullVideoRef = useRef<HTMLVideoElement | null>(null);
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
   const navigationDisabled = useMemo(
     () => Boolean(showReviewModal) || Boolean(watchingFull) || showWatchPartyMenu,
@@ -92,7 +94,7 @@ export default function App() {
       right: '0',
       bottom: '0',
       pointerEvents: 'none',
-      zIndex: '2147483646'
+      zIndex: '2147483647' // Higher than fullscreen video container (9999) and max safe z-index
     });
     document.body.appendChild(node);
     setOverlayHost(node);
@@ -537,7 +539,18 @@ export default function App() {
 
   if (watchingFull && user) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: tokens.backgroundPrimary, zIndex: 9999 }}>
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: tokens.backgroundPrimary,
+          zIndex: 9999,
+          isolation: 'isolate' // Create new stacking context
+        }}
+      >
         <button
           onClick={() => setWatchingFull(null)}
           style={{
@@ -577,20 +590,22 @@ export default function App() {
             zIndex: 1
           }}
         />
-        {/* Watch Party Component - shows on top of full movie */}
+        {/* Watch Party Component - pass null to render chat inline instead of using portal */}
         <WatchPartyComponent
           user={user}
           currentContent={currentTrailer}
           videoRef={fullVideoRef}
           showMenu={showWatchPartyMenu}
           onMenuClose={() => setShowWatchPartyMenu(false)}
-          onPartyStateChange={(inParty) => {
-            console.log('Watch party state changed:', inParty);
+          onPartyStateChange={(inParty, partyId) => {
+            console.log('Watch party state changed:', inParty, 'Party ID:', partyId);
+            setActivePartyId(inParty ? partyId || null : null);
           }}
           onWatchFullMovie={(videoUrl) => {
             setWatchingFull(videoUrl);
           }}
-          overlayRoot={overlayHost}
+          overlayRoot={null}
+          partyId={activePartyId}
         />
       </div>
     );
@@ -684,13 +699,15 @@ export default function App() {
         videoRef={{ current: currentTrailer ? videoRefs.current[currentTrailer.id] || null : null }}
         showMenu={showWatchPartyMenu}
         onMenuClose={() => setShowWatchPartyMenu(false)}
-        onPartyStateChange={(inParty) => {
-          console.log('Watch party state changed:', inParty);
+        onPartyStateChange={(inParty, partyId) => {
+          console.log('Watch party state changed:', inParty, 'Party ID:', partyId);
+          setActivePartyId(inParty ? partyId || null : null);
         }}
         onWatchFullMovie={(videoUrl) => {
           setWatchingFull(videoUrl);
         }}
         overlayRoot={overlayHost}
+        partyId={activePartyId}
       />
     </div>
   );
