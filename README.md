@@ -210,6 +210,7 @@ VITE_FIREBASE_PROJECT_ID=story-scout
   - Mobile & Web: Real-time Firebase sync
   - Roku: REST API polling for sync state
 - **Auto-Join Full Movie**: Guests automatically start the full movie when joining a party
+- **Live Chat Overlay**: TikTok-style transparent chat column on web that floats above the video without blocking transport controls
 
 ### Engagement System
 - **TikTok-Style Interactions**: Vertical engagement bar with likes, reviews, and shares

@@ -69,9 +69,37 @@ export default function App() {
   const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const fullVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
+  const navigationDisabled = useMemo(
+    () => Boolean(showReviewModal) || Boolean(watchingFull) || showWatchPartyMenu,
+    [showReviewModal, watchingFull, showWatchPartyMenu]
+  );
+  const wheelListenerOptions = useMemo(() => ({ passive: false } as AddEventListenerOptions), []);
 
   useEffect(() => {
     getFirebaseAnalytics().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const node = document.createElement('div');
+    node.id = 'watch-party-overlay-root';
+    Object.assign(node.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      right: '0',
+      bottom: '0',
+      pointerEvents: 'none',
+      zIndex: '2147483646'
+    });
+    document.body.appendChild(node);
+    setOverlayHost(node);
+    return () => {
+      document.body.removeChild(node);
+      setOverlayHost(null);
+    };
   }, []);
 
   useEffect(() => {
@@ -152,15 +180,17 @@ export default function App() {
   );
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    if (navigationDisabled) {
+      setTransitioning(false);
+      return;
+    }
 
     const handleWheel = (event: WheelEvent) => {
       if (transitioning) return;
-      if (event.deltaY > 20) { // More sensitive
+      if (event.deltaY > 10) {
         event.preventDefault();
         goToIndex(currentIndex + 1);
-      } else if (event.deltaY < -20) {
+      } else if (event.deltaY < -10) {
         event.preventDefault();
         goToIndex(currentIndex - 1);
       }
@@ -175,13 +205,13 @@ export default function App() {
       }
     };
 
-    el.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('wheel', handleWheel, wheelListenerOptions);
     window.addEventListener('keydown', handleKey);
     return () => {
-      el.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('wheel', handleWheel, wheelListenerOptions);
       window.removeEventListener('keydown', handleKey);
     };
-  }, [currentIndex, transitioning, filteredTrailers.length, goToIndex]);
+  }, [currentIndex, transitioning, filteredTrailers.length, goToIndex, navigationDisabled, wheelListenerOptions]);
 
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -531,23 +561,27 @@ export default function App() {
           ←
         </button>
         <video
+          ref={fullVideoRef}
           src={watchingFull}
           autoPlay
           controls
+          controlsList="nodownload nofullscreen"
+          disablePictureInPicture
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             width: '100%',
             height: '100%',
-            objectFit: 'contain'
+            objectFit: 'contain',
+            zIndex: 1
           }}
         />
         {/* Watch Party Component - shows on top of full movie */}
         <WatchPartyComponent
           user={user}
           currentContent={currentTrailer}
-          videoRef={{ current: currentTrailer ? videoRefs.current[currentTrailer.id] || null : null }}
+          videoRef={fullVideoRef}
           showMenu={showWatchPartyMenu}
           onMenuClose={() => setShowWatchPartyMenu(false)}
           onPartyStateChange={(inParty) => {
@@ -556,6 +590,7 @@ export default function App() {
           onWatchFullMovie={(videoUrl) => {
             setWatchingFull(videoUrl);
           }}
+          overlayRoot={overlayHost}
         />
       </div>
     );
@@ -655,6 +690,7 @@ export default function App() {
         onWatchFullMovie={(videoUrl) => {
           setWatchingFull(videoUrl);
         }}
+        overlayRoot={overlayHost}
       />
     </div>
   );
@@ -781,6 +817,7 @@ const engagementCountStyle: React.CSSProperties = {
   fontWeight: 700,
   textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)'
 };
+
 
 const overlayStyle: React.CSSProperties = {
   position: 'absolute',

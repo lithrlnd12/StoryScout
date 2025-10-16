@@ -168,6 +168,11 @@ setInterval(() => {
 - 3-second drift tolerance for video sync
 - Host controls: play/pause/seek synced to all participants
 - Guest experience: Waits in lobby until host starts
+- TikTok-style chat overlay:
+  - Autoloads when the party transitions to `playing`
+  - Message stack floats on the right edge with transparent chips so playback controls remain clickable
+  - Input pill stays docked near the lower-right and is the only element that captures pointer events
+  - Toggle button is still accessible, allowing the host to collapse chat when focusing on the video
 
 ---
 

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import tokens from '@tokens/colors.json';
 import {
   createWatchParty,
@@ -11,6 +12,16 @@ import {
 } from '../firebaseFirestore';
 import type { User } from '../firebaseAuth';
 
+// Chat message type
+type ChatMessage = {
+  id: string;
+  userId: string;
+  displayName: string;
+  platform: string;
+  message: string;
+  timestamp: any;
+};
+
 type WatchPartyProps = {
   user: User;
   currentContent: TrailerDoc | null;
@@ -19,6 +30,7 @@ type WatchPartyProps = {
   onMenuClose?: () => void;
   onPartyStateChange?: (inParty: boolean) => void;
   onWatchFullMovie?: (videoUrl: string) => void;
+  overlayRoot?: HTMLElement | null;
 };
 
 export default function WatchPartyComponent({
@@ -28,7 +40,8 @@ export default function WatchPartyComponent({
   showMenu: externalShowMenu,
   onMenuClose,
   onPartyStateChange,
-  onWatchFullMovie
+  onWatchFullMovie,
+  overlayRoot
 }: WatchPartyProps) {
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -40,6 +53,15 @@ export default function WatchPartyComponent({
   const [error, setError] = useState<string | null>(null);
   const [previousParticipantCount, setPreviousParticipantCount] = useState(0);
   const [joinNotification, setJoinNotification] = useState<string | null>(null);
+
+  // Chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [showChat, setShowChat] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatPollInterval = useRef<number | null>(null);
+  const autoOpenedChatRef = useRef(false);
 
   // Use external showMenu if provided, otherwise use internal state
   const showMenu = externalShowMenu !== undefined ? externalShowMenu : internalShowMenu;
@@ -78,6 +100,18 @@ export default function WatchPartyComponent({
 
     return unsubscribe;
   }, [party?.id, isHost, previousParticipantCount]);
+
+  useEffect(() => {
+    if (!party) {
+      autoOpenedChatRef.current = false;
+      return;
+    }
+
+    if (party.status === 'playing' && !autoOpenedChatRef.current) {
+      setShowChat(true);
+      autoOpenedChatRef.current = true;
+    }
+  }, [party?.status, party]);
 
   // Sync video playback with party state
   const syncVideoWithParty = (partyState: WatchParty) => {
@@ -272,6 +306,94 @@ export default function WatchPartyComponent({
     }
   };
 
+  // Chat functions
+  const fetchMessages = async () => {
+    if (!party) return;
+
+    try {
+      const response = await fetch(
+        `https://us-central1-story-scout.cloudfunctions.net/getChatMessages?partyCode=${party.code}&limit=50`
+      );
+      const data = await response.json();
+
+      if (data.success && data.messages) {
+        setMessages(data.messages);
+        // Auto-scroll to bottom
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!party || !messageInput.trim() || sendingMessage) return;
+
+    const trimmedMessage = messageInput.trim();
+    if (trimmedMessage.length > 200) {
+      alert('Message too long (max 200 characters)');
+      return;
+    }
+
+    setSendingMessage(true);
+
+    try {
+      const response = await fetch(
+        'https://us-central1-story-scout.cloudfunctions.net/sendChatMessage',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            partyCode: party.code,
+            userId: user.uid,
+            displayName: user.email || 'Anonymous',
+            platform: 'web',
+            message: trimmedMessage
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMessageInput('');
+        // Immediately fetch new messages
+        await fetchMessages();
+      } else {
+        alert(data.error || 'Failed to send message');
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+      alert('Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // Poll for new messages every 2 seconds when chat is open
+  useEffect(() => {
+    if (party && showChat) {
+      // Fetch immediately
+      fetchMessages();
+
+      // Set up polling
+      chatPollInterval.current = setInterval(fetchMessages, 2000);
+
+      return () => {
+        if (chatPollInterval.current) {
+          clearInterval(chatPollInterval.current);
+        }
+      };
+    }
+  }, [party, showChat]);
+
   return (
     <>
       {/* Menu Modal */}
@@ -443,6 +565,78 @@ export default function WatchPartyComponent({
           </div>
         </div>
       )}
+
+      {/* Chat Toggle Button (TikTok-style, appears when in party) */}
+      {party && !showMenu && !showJoinModal && typeof document !== 'undefined' &&
+        createPortal(
+          <button
+            style={chatToggleButtonStyle}
+            onClick={() => setShowChat(!showChat)}
+          >
+            💬 {showChat ? 'Hide Chat' : 'Chat'}
+            {messages.length > 0 && !showChat && (
+              <span style={chatBadgeStyle}>{messages.length}</span>
+            )}
+          </button>,
+          overlayRoot ?? document.body
+        )}
+
+      {/* TikTok-Style Chat Overlay */}
+      {party && showChat && typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div style={chatMessageStackStyle}>
+              {messages.length === 0 ? (
+                <p style={chatEmptyTextStyle}>No messages yet. Say hi! 👋</p>
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      ...chatMessageRowStyle,
+                      justifyContent: msg.userId === user.uid ? 'flex-end' : 'flex-start'
+                    }}
+                  >
+                    <span style={chatHandleStyle}>{msg.displayName}</span>
+                    <span
+                      style={{
+                        ...chatMessageChipStyle,
+                        backgroundColor: msg.userId === user.uid
+                          ? 'rgba(255, 20, 147, 0.5)'
+                          : 'rgba(0, 0, 0, 0.55)'
+                      }}
+                    >
+                      {msg.message}
+                    </span>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            <div style={chatInputDockStyle}>
+              <input
+                type="text"
+                style={chatInputStyle}
+                placeholder="Send a message"
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                maxLength={200}
+              />
+              <button
+                style={{
+                  ...chatSendButtonStyle,
+                  opacity: sendingMessage || !messageInput.trim() ? 0.5 : 1
+                }}
+                onClick={sendMessage}
+                disabled={sendingMessage || !messageInput.trim()}
+              >
+                ➤
+              </button>
+            </div>
+          </>,
+          overlayRoot ?? document.body
+        )}
     </>
   );
 }
@@ -642,3 +836,134 @@ const notificationBannerStyle: React.CSSProperties = {
   fontSize: 16,
   animation: 'slideIn 0.3s ease-out'
 };
+
+// Chat Styles (TikTok-inspired)
+const chatToggleButtonStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: '18vh',
+  right: 28,
+  backgroundColor: 'rgba(255, 20, 147, 0.9)',
+  border: 'none',
+  borderRadius: 999,
+  padding: '12px 22px',
+  color: tokens.textPrimary,
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: 'pointer',
+  boxShadow: '0 12px 28px rgba(0, 0, 0, 0.35)',
+  zIndex: 2147483647,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  pointerEvents: 'auto',
+  backdropFilter: 'blur(10px)'
+};
+
+const chatBadgeStyle: React.CSSProperties = {
+  backgroundColor: tokens.error,
+  borderRadius: '50%',
+  width: 22,
+  height: 22,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 11,
+  fontWeight: 700,
+  marginLeft: 6
+};
+
+const chatMessageStackStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: '18vh',
+  right: 24,
+  width: 'min(300px, 32vw)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  maxHeight: '56vh',
+  overflowY: 'auto',
+  scrollbarWidth: 'none',
+  pointerEvents: 'none',
+  color: tokens.textPrimary,
+  textShadow: '0 2px 8px rgba(0,0,0,0.65)',
+  fontSize: 14,
+  lineHeight: 1.35,
+  zIndex: 2147483647,
+  padding: '4px 8px',
+  borderRadius: 18,
+  background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%)'
+};
+
+const chatMessageRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  pointerEvents: 'none'
+};
+
+const chatHandleStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: tokens.accentCyan,
+  textTransform: 'lowercase',
+  opacity: 0.85
+};
+
+const chatMessageChipStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '6px 12px',
+  borderRadius: 16,
+  backdropFilter: 'blur(8px)',
+  border: '1px solid rgba(255,255,255,0.18)',
+  pointerEvents: 'none'
+};
+
+const chatEmptyTextStyle: React.CSSProperties = {
+  color: tokens.textMuted,
+  textAlign: 'right',
+  fontSize: 13,
+  pointerEvents: 'none'
+};
+
+const chatInputDockStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: '16vh',
+  right: 24,
+  width: 'min(300px, 32vw)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  pointerEvents: 'auto',
+  backgroundColor: 'rgba(0,0,0,0.55)',
+  borderRadius: 999,
+  padding: '8px 12px',
+  border: '1px solid rgba(255,255,255,0.15)',
+  backdropFilter: 'blur(14px)',
+  zIndex: 2147483647
+};
+
+const chatInputStyle: React.CSSProperties = {
+  flex: 1,
+  background: 'transparent',
+  border: 'none',
+  padding: 0,
+  color: tokens.textPrimary,
+  fontSize: 14,
+  outline: 'none'
+};
+
+const chatSendButtonStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(255, 20, 147, 0.85)',
+  border: 'none',
+  color: tokens.textPrimary,
+  borderRadius: 12,
+  width: 36,
+  height: 36,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 16,
+  cursor: 'pointer'
+};
+

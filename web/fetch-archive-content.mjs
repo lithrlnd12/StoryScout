@@ -13,9 +13,12 @@ const __dirname = dirname(__filename);
  * - shortfilms: Short films
  */
 
-// Curated list of quality films from Internet Archive
-// Mix of classic public domain (pre-1970) and modern indie/open source (2000+)
-// Organized by genre with good distribution for infinite scroll experience
+/**
+ * Curated list of quality films from Internet Archive.
+ *
+ * Optional trailer overrides allow us to point at a different Internet Archive
+ * item when a shorter trailer cut exists separate from the full feature.
+ */
 const CURATED_FILMS = [
   // ========== COMEDY (Classic + Modern) ==========
   { id: 'charlie_chaplin_film_fest', genre: 'Comedy', era: 'classic' },
@@ -87,6 +90,8 @@ const CURATED_FILMS = [
   { id: '20100726-united-we-fall', genre: 'Documentary', era: 'modern' }, // 2010 United We Fall (123 min)
 ];
 
+const TRAILER_MAX_DURATION_SECONDS = 360; // Prefer clips <= 6 minutes
+
 /**
  * Fetch metadata for a single Internet Archive item
  */
@@ -102,10 +107,15 @@ async function fetchItemMetadata(identifier) {
 }
 
 /**
- * Extract best video file from Internet Archive metadata
- * Prioritizes: 512Kb MP4 (good for trailers), then regular MP4
+ * Extract best video file from Internet Archive metadata.
+ * Prioritizes: 512Kb MP4 (good for trailers), then regular MP4.
+ *
+ * @param {any} metadata - Internet Archive metadata payload
+ * @param {{ maxDurationSeconds?: number }} [options] - optional filters
  */
-function getBestVideoFile(metadata) {
+function getBestVideoFile(metadata, options = {}) {
+  const { maxDurationSeconds } = options;
+
   if (!metadata.files || !Array.isArray(metadata.files)) {
     return null;
   }
@@ -122,14 +132,27 @@ function getBestVideoFile(metadata) {
     return null;
   }
 
+  let candidates = mp4Files;
+
+  if (typeof maxDurationSeconds === 'number') {
+    const durationFiltered = mp4Files.filter(file => {
+      const length = parseFloat(file.length || '0');
+      return length > 0 && length <= maxDurationSeconds;
+    });
+
+    if (durationFiltered.length) {
+      candidates = durationFiltered;
+    }
+  }
+
   // Prefer 512Kb version (good quality, smaller size)
-  const preferred = mp4Files.find(f => f.name && f.name.includes('512kb'));
+  const preferred = candidates.find(f => f.name && f.name.toLowerCase().includes('512kb'));
   if (preferred) {
     return preferred;
   }
 
   // Otherwise, get the smallest MP4 for faster loading
-  const sorted = mp4Files.sort((a, b) => {
+  const sorted = [...candidates].sort((a, b) => {
     const sizeA = parseInt(a.size || '999999999');
     const sizeB = parseInt(b.size || '999999999');
     return sizeA - sizeB;
@@ -152,6 +175,65 @@ function buildThumbnailUrl(identifier) {
   return `https://archive.org/services/img/${identifier}`;
 }
 
+function normalizeForComparison(value) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+async function searchForTrailerIdentifier(title) {
+  if (!title) {
+    return null;
+  }
+
+  const searchPhrase = `"${title.replace(/"/g, '\\"')}"`;
+  const query = `collection:movie_trailers AND mediatype:movies AND (title:${searchPhrase} OR description:${searchPhrase} OR subject:${searchPhrase})`;
+  const url =
+    `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&output=json&rows=10&sort[]=${encodeURIComponent('downloads desc')}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to search trailer for ${title}`);
+  }
+
+  const data = await response.json();
+  const docs = data.response?.docs;
+  if (!Array.isArray(docs) || docs.length === 0) {
+    return null;
+  }
+
+  const normalizedTitle = normalizeForComparison(title);
+  const scored = docs
+    .map(doc => {
+      const docTitle = normalizeForComparison(doc.title);
+      const identifier = normalizeForComparison(doc.identifier);
+
+      let score = 0;
+      if (docTitle.includes(normalizedTitle) || identifier.includes(normalizedTitle)) {
+        score += 6;
+      }
+      if (docTitle.includes('trailer') || identifier.includes('trailer')) {
+        score += 5;
+      }
+      if (docTitle.includes('teaser') || identifier.includes('teaser')) {
+        score += 2;
+      }
+      const downloads = typeof doc.downloads === 'number' ? doc.downloads : 0;
+      score += Math.log10(downloads + 1);
+
+      return { doc, score };
+    })
+    .filter(entry => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) {
+    return null;
+  }
+
+  return scored[0].doc.identifier;
+}
+
 /**
  * Process all curated films
  */
@@ -166,73 +248,118 @@ async function fetchAllContent() {
     try {
       console.log(`Fetching: ${film.id}...`);
 
-      const metadata = await fetchItemMetadata(film.id);
+      const fullIdentifier = film.id;
+      const fullMetadata = await fetchItemMetadata(fullIdentifier);
 
-      // Check if item is dark/unavailable
-      if (metadata.is_dark) {
+      if (fullMetadata.is_dark) {
         console.log(`  ✗ Skipped: ${film.id} - Item is private/unavailable\n`);
         failCount++;
         continue;
       }
 
-      const videoFile = getBestVideoFile(metadata);
-
-      if (!videoFile) {
-        console.log(`  ✗ Skipped: ${film.id} - No suitable video file found\n`);
+      const fullVideoFile = getBestVideoFile(fullMetadata);
+      if (!fullVideoFile) {
+        console.log(`  ✗ Skipped: ${film.id} - No suitable full-content video file found\n`);
         failCount++;
         continue;
       }
 
-      const title = metadata.metadata?.title || film.id.replace(/_/g, ' ');
-      const description = metadata.metadata?.description || 'Classic film from Internet Archive';
-      const year = metadata.metadata?.year || metadata.metadata?.date || 'Unknown';
-      const runtime = parseFloat(videoFile.length || '0');
+      const title = fullMetadata.metadata?.title || film.id.replace(/_/g, ' ');
+      const description = fullMetadata.metadata?.description || 'Classic film from Internet Archive';
+      const year = fullMetadata.metadata?.year || fullMetadata.metadata?.date || 'Unknown';
+      const runtime = parseFloat(fullVideoFile.length || '0');
 
-      const videoUrl = buildVideoUrl(film.id, videoFile.name);
-      const thumbnailUrl = buildThumbnailUrl(film.id);
+      let trailerIdentifier = film.trailerId ?? null;
+      let trailerMetadata = null;
+      let trailerVideoFile = null;
+
+      if (!trailerIdentifier) {
+        try {
+          trailerIdentifier = await searchForTrailerIdentifier(title);
+        } catch (searchError) {
+          console.log(`  ! Trailer search failed for ${film.id}: ${searchError.message}`);
+        }
+      }
+
+      if (trailerIdentifier && trailerIdentifier !== fullIdentifier) {
+        try {
+          trailerMetadata = await fetchItemMetadata(trailerIdentifier);
+          if (trailerMetadata.is_dark) {
+            console.log(`  ! Trailer item is private/unavailable: ${trailerIdentifier}`);
+            trailerMetadata = null;
+          }
+        } catch (trailerError) {
+          console.log(`  ! Failed to fetch trailer metadata (${trailerIdentifier}): ${trailerError.message}`);
+          trailerMetadata = null;
+        }
+      }
+
+      if (trailerMetadata) {
+        trailerVideoFile = getBestVideoFile(trailerMetadata, { maxDurationSeconds: TRAILER_MAX_DURATION_SECONDS });
+        if (!trailerVideoFile) {
+          console.log(`  ! No suitable trailer clip found for ${film.id}, falling back to full content`);
+          trailerMetadata = null;
+        }
+      }
+
+      if (!trailerMetadata || !trailerVideoFile) {
+        trailerIdentifier = fullIdentifier;
+        trailerMetadata = fullMetadata;
+        trailerVideoFile = fullVideoFile;
+      }
+
+      const fullVideoUrl = buildVideoUrl(fullIdentifier, fullVideoFile.name);
+      const trailerVideoUrl = buildVideoUrl(trailerIdentifier, trailerVideoFile.name);
+      const thumbnailUrl = buildThumbnailUrl(trailerIdentifier || fullIdentifier);
+
+      const trailerRuntime = parseFloat(trailerVideoFile.length || '0');
 
       const result = {
         id: film.id,
         title: title,
         genre: film.genre,
-        synopsis: description.substring(0, 300), // Truncate long descriptions
+        synopsis: description.substring(0, 300),
         year: year,
 
-        // Video URLs (direct MP4 files)
         trailerType: 'direct',
-        trailerVideoId: videoUrl, // Full URL for direct playback
-        trailerDurationSeconds: Math.floor(runtime),
+        trailerVideoId: trailerVideoUrl,
+        trailerDurationSeconds: Math.floor(trailerRuntime),
 
-        // For now, trailer and full content are the same
         fullContentType: 'direct',
-        fullContentVideoId: videoUrl,
+        fullContentVideoId: fullVideoUrl,
         fullContentDurationSeconds: Math.floor(runtime),
 
         thumbnailUrl: thumbnailUrl,
 
-        // Engagement metrics
         likes: 0,
         shares: 0,
         reviews: 0,
         averageRating: 0,
 
-        // Internet Archive specific
-        archiveId: film.id,
-        fileSize: parseInt(videoFile.size || '0'),
-        resolution: `${videoFile.width}x${videoFile.height}`
+        archiveId: fullIdentifier,
+        trailerArchiveId: trailerIdentifier,
+        fileSize: parseInt(fullVideoFile.size || '0'),
+        resolution: `${fullVideoFile.width}x${fullVideoFile.height}`,
+        trailerFileSize: parseInt(trailerVideoFile.size || '0'),
+        trailerResolution: `${trailerVideoFile.width}x${trailerVideoFile.height}`,
+        fullContentLicenseUrl: fullMetadata.metadata?.licenseurl || null,
+        trailerLicenseUrl: trailerMetadata.metadata?.licenseurl || null
       };
 
       results.push(result);
       successCount++;
 
       console.log(`  ✓ Added: ${title}`);
-      console.log(`    Video: ${videoFile.name}`);
+      if (trailerIdentifier !== fullIdentifier) {
+        console.log(`    Trailer: ${trailerVideoFile.name} (${Math.floor(trailerRuntime)}s)`);
+      } else {
+        console.log(`    Trailer: using full content (no dedicated trailer found)`);
+      }
+      console.log(`    Full: ${fullVideoFile.name}`);
       console.log(`    Size: ${(result.fileSize / 1024 / 1024).toFixed(2)} MB`);
       console.log(`    Duration: ${Math.floor(runtime / 60)}m ${Math.floor(runtime % 60)}s\n`);
 
-      // Rate limit: be nice to Internet Archive
       await new Promise(resolve => setTimeout(resolve, 500));
-
     } catch (error) {
       console.log(`  ✗ Error: ${film.id} - ${error.message}\n`);
       failCount++;
