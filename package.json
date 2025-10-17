@@ -16,6 +16,8 @@
     "seed:public": "node scripts/seed-public-content.js"
   },
   "dependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.52.4",
+    "esbuild": "^0.21.5",
     "firebase-admin": "^12.5.0"
   }
 }

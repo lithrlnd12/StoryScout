@@ -68,6 +68,7 @@ export default function App() {
   const [isGloballyMuted, setIsGloballyMuted] = useState(true); // Global mute state
   const [showWatchPartyMenu, setShowWatchPartyMenu] = useState(false);
   const [activePartyId, setActivePartyId] = useState<string | null>(null); // Track active party ID
+  const [voiceEnabled, setVoiceEnabled] = useState(false); // Track if voice chat is enabled for the party
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const fullVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -606,6 +607,8 @@ export default function App() {
           }}
           overlayRoot={null}
           partyId={activePartyId}
+          voiceEnabled={voiceEnabled}
+          onVoiceEnabledChange={setVoiceEnabled}
         />
       </div>
     );
@@ -708,6 +711,8 @@ export default function App() {
         }}
         overlayRoot={overlayHost}
         partyId={activePartyId}
+        voiceEnabled={voiceEnabled}
+        onVoiceEnabledChange={setVoiceEnabled}
       />
     </div>
   );

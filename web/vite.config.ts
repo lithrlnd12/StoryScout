@@ -11,6 +11,11 @@ export default defineConfig({
       '@mocks': path.resolve(__dirname, '../shared/mocks')
     }
   },
+  define: {
+    // Polyfill for Node.js globals required by simple-peer and its dependencies
+    global: 'globalThis',
+    'process.env': {}
+  },
   server: {
     port: 5173
   }

@@ -5,12 +5,14 @@ import {
   createWatchParty,
   joinWatchParty,
   updateWatchPartyState,
+  updateWatchPartyVoiceEnabled,
   leaveWatchParty,
   subscribeToWatchParty,
   type WatchParty,
   type TrailerDoc
 } from '../firebaseFirestore';
 import type { User } from '../firebaseAuth';
+import { createVoiceChatManager, type VoiceParticipant } from '../services/voiceChat';
 
 // Chat message type
 type ChatMessage = {
@@ -32,6 +34,8 @@ type WatchPartyProps = {
   onWatchFullMovie?: (videoUrl: string) => void;
   overlayRoot?: HTMLElement | null;
   partyId?: string | null; // Allow parent to pass in party ID to maintain across view transitions
+  voiceEnabled?: boolean; // Voice chat enabled state from parent
+  onVoiceEnabledChange?: (enabled: boolean) => void; // Callback to update voice enabled state
 };
 
 export default function WatchPartyComponent({
@@ -43,7 +47,9 @@ export default function WatchPartyComponent({
   onPartyStateChange,
   onWatchFullMovie,
   overlayRoot,
-  partyId: externalPartyId
+  partyId: externalPartyId,
+  voiceEnabled: externalVoiceEnabled,
+  onVoiceEnabledChange
 }: WatchPartyProps) {
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -64,6 +70,16 @@ export default function WatchPartyComponent({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatPollInterval = useRef<number | null>(null);
   const autoOpenedChatRef = useRef(false);
+
+  // Voice chat state - use external state if provided, otherwise use local fallback
+  const [localVoiceEnabled, setLocalVoiceEnabled] = useState(false);
+  const voiceEnabled = externalVoiceEnabled ?? localVoiceEnabled;
+  const setVoiceEnabled = onVoiceEnabledChange ?? setLocalVoiceEnabled;
+  const [voiceActive, setVoiceActive] = useState(false); // Whether voice chat is currently active
+  const [isMuted, setIsMuted] = useState(true);
+  const [voiceParticipants, setVoiceParticipants] = useState<VoiceParticipant[]>([]);
+  const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set());
+  const voiceChatManager = useRef(createVoiceChatManager());
 
   // Use external showMenu if provided, otherwise use internal state
   const showMenu = externalShowMenu !== undefined ? externalShowMenu : internalShowMenu;
@@ -410,6 +426,11 @@ export default function WatchPartyComponent({
     }
   };
 
+  const handleToggleMute = () => {
+    voiceChatManager.current.toggleMute();
+    setIsMuted(voiceChatManager.current.isMuted());
+  };
+
   // Poll for new messages every 2 seconds when chat is open
   useEffect(() => {
     if (party && showChat) {
@@ -417,7 +438,7 @@ export default function WatchPartyComponent({
       fetchMessages();
 
       // Set up polling
-      chatPollInterval.current = setInterval(fetchMessages, 2000);
+      chatPollInterval.current = window.setInterval(fetchMessages, 2000);
 
       return () => {
         if (chatPollInterval.current) {
@@ -426,6 +447,84 @@ export default function WatchPartyComponent({
       };
     }
   }, [party, showChat]);
+
+  // Sync voiceEnabled from party document (for guests) or to party document (for host)
+  useEffect(() => {
+    if (!party) return;
+
+    // For guests: read voiceEnabled from party
+    if (!isHost && party.voiceEnabled !== undefined) {
+      console.log('[WatchParty] Guest reading voiceEnabled from party:', party.voiceEnabled);
+      setVoiceEnabled(party.voiceEnabled);
+    }
+  }, [party?.voiceEnabled, isHost]);
+
+  // When host changes voiceEnabled, save to party document
+  useEffect(() => {
+    if (!party || !isHost) return;
+
+    // Only update if value actually changed to avoid loops
+    if (party.voiceEnabled !== voiceEnabled) {
+      console.log('[WatchParty] Host updating voiceEnabled in party:', voiceEnabled);
+      updateWatchPartyVoiceEnabled(party.id, voiceEnabled).catch(err =>
+        console.error('Error updating voice enabled:', err)
+      );
+    }
+  }, [voiceEnabled, party?.id, isHost]);
+
+  // Initialize voice chat when party is playing and voice is enabled
+  useEffect(() => {
+    if (!party || !voiceEnabled || party.status !== 'playing') {
+      // Cleanup voice chat if conditions not met
+      if (voiceActive) {
+        voiceChatManager.current.cleanup();
+        setVoiceActive(false);
+      }
+      return;
+    }
+
+    // Initialize voice chat
+    const initVoice = async () => {
+      try {
+        await voiceChatManager.current.initialize(
+          party.id,
+          user.uid,
+          user.email || 'Anonymous'
+        );
+
+        setVoiceActive(true);
+        setIsMuted(voiceChatManager.current.isMuted());
+
+        // Listen for participant changes
+        voiceChatManager.current.onParticipantsChange((participants) => {
+          setVoiceParticipants(participants);
+        });
+
+        // Listen for speaking changes
+        voiceChatManager.current.onSpeakingChange((userId, isSpeaking) => {
+          setSpeakingUsers(prev => {
+            const next = new Set(prev);
+            if (isSpeaking) {
+              next.add(userId);
+            } else {
+              next.delete(userId);
+            }
+            return next;
+          });
+        });
+      } catch (err) {
+        console.error('[Voice Chat] Failed to initialize:', err);
+        alert('Failed to start voice chat. Please check microphone permissions.');
+      }
+    };
+
+    initVoice();
+
+    return () => {
+      voiceChatManager.current.cleanup();
+      setVoiceActive(false);
+    };
+  }, [party?.id, voiceEnabled, party?.status, user.uid]);
 
   return (
     <>
@@ -577,6 +676,37 @@ export default function WatchPartyComponent({
               </span>
             </div>
 
+            {/* Voice Chat Toggle (Host only, before starting party) */}
+            {isHost && party.status === 'waiting' && (
+              <div style={voiceToggleContainerStyle}>
+                <label style={voiceToggleLabelStyle}>
+                  <input
+                    type="checkbox"
+                    checked={voiceEnabled}
+                    onChange={(e) => setVoiceEnabled(e.target.checked)}
+                    style={voiceToggleCheckboxStyle}
+                  />
+                  <span>🎤 Enable Voice Chat</span>
+                </label>
+                <p style={voiceToggleHintStyle}>
+                  Participants can talk during the movie (free P2P audio)
+                </p>
+              </div>
+            )}
+
+            {/* Voice Chat Status (Guest view in lobby) */}
+            {!isHost && party.status === 'waiting' && voiceEnabled && (
+              <div style={{...voiceToggleContainerStyle, backgroundColor: 'rgba(0, 255, 255, 0.1)', borderColor: tokens.accentCyan}}>
+                <div style={{...voiceToggleLabelStyle, marginBottom: 0}}>
+                  <span style={{fontSize: 18}}>🎤</span>
+                  <span>Voice Chat Enabled</span>
+                </div>
+                <p style={voiceToggleHintStyle}>
+                  You'll be asked for microphone access when the party starts
+                </p>
+              </div>
+            )}
+
             {/* Start Watch Party Button (Host Only, when status is 'waiting') */}
             {isHost && party.status === 'waiting' && (
               <button style={startButtonStyle} onClick={handleStartWatchParty}>
@@ -711,6 +841,42 @@ export default function WatchPartyComponent({
             overlayRoot
           )
         ) : null
+      )}
+
+      {/* Voice Chat Overlay (only in fullscreen) */}
+      {voiceActive && overlayRoot === null && (
+        <>
+          {console.log('[Voice Overlay] Rendering - voiceActive:', voiceActive, 'overlayRoot:', overlayRoot, 'voiceParticipants:', voiceParticipants.length)}
+          <div style={voiceOverlayStyle}>
+          {/* Mute Button */}
+          <button
+            onClick={handleToggleMute}
+            style={isMuted ? voiceMuteButtonStyle : voiceMuteButtonActiveStyle}
+          >
+            <span style={{ fontSize: 18 }}>{isMuted ? '🔇' : '🎤'}</span>
+            <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+          </button>
+
+          {/* Speaking Indicators */}
+          {voiceParticipants.length > 0 && (
+            <div style={voiceParticipantsContainerStyle}>
+              {voiceParticipants.map((participant) => {
+                const isSpeaking = speakingUsers.has(participant.userId);
+                return (
+                  <div
+                    key={participant.userId}
+                    style={isSpeaking ? voiceParticipantSpeakingStyle : voiceParticipantStyle}
+                  >
+                    {isSpeaking && <div style={voiceSpeakingIndicatorStyle} />}
+                    <span>{participant.displayName}</span>
+                    {participant.isMuted && <span style={{ opacity: 0.6, fontSize: 12 }}>🔇</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        </>
       )}
     </>
   );
@@ -1006,5 +1172,110 @@ const chatSendButtonStyle: React.CSSProperties = {
   justifyContent: 'center',
   fontSize: 16,
   cursor: 'pointer'
+};
+
+// Voice Chat Styles
+const voiceToggleContainerStyle: React.CSSProperties = {
+  backgroundColor: tokens.backgroundPrimary,
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  border: `1px solid ${tokens.borderDefault}`
+};
+
+const voiceToggleLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  cursor: 'pointer',
+  color: tokens.textPrimary,
+  fontSize: 16,
+  fontWeight: 600,
+  marginBottom: 8
+};
+
+const voiceToggleCheckboxStyle: React.CSSProperties = {
+  width: 20,
+  height: 20,
+  cursor: 'pointer',
+  accentColor: tokens.accentCyan
+};
+
+const voiceToggleHintStyle: React.CSSProperties = {
+  color: tokens.textSecondary,
+  fontSize: 12,
+  margin: 0,
+  marginTop: 4,
+  marginLeft: 32
+};
+
+const voiceOverlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 24,
+  left: 24,
+  zIndex: 10002,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12
+};
+
+const voiceMuteButtonStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(0, 0, 0, 0.65)',
+  border: '1px solid rgba(255, 255, 255, 0.15)',
+  borderRadius: 999,
+  padding: '12px 20px',
+  color: tokens.textPrimary,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  backdropFilter: 'blur(14px)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  transition: 'all 0.2s ease'
+};
+
+const voiceMuteButtonActiveStyle: React.CSSProperties = {
+  ...voiceMuteButtonStyle,
+  backgroundColor: 'rgba(0, 255, 255, 0.25)',
+  borderColor: tokens.accentCyan
+};
+
+const voiceParticipantsContainerStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  maxHeight: 200,
+  overflowY: 'auto'
+};
+
+const voiceParticipantStyle: React.CSSProperties = {
+  backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  border: '1px solid rgba(255, 255, 255, 0.15)',
+  borderRadius: 20,
+  padding: '8px 14px',
+  color: tokens.textPrimary,
+  fontSize: 13,
+  fontWeight: 500,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  backdropFilter: 'blur(14px)',
+  transition: 'all 0.2s ease'
+};
+
+const voiceParticipantSpeakingStyle: React.CSSProperties = {
+  ...voiceParticipantStyle,
+  backgroundColor: 'rgba(0, 255, 100, 0.35)',
+  borderColor: 'rgba(0, 255, 100, 0.6)',
+  boxShadow: '0 0 12px rgba(0, 255, 100, 0.4)'
+};
+
+const voiceSpeakingIndicatorStyle: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  backgroundColor: '#00ff64',
+  animation: 'pulse 1s ease-in-out infinite'
 };
 

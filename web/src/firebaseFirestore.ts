@@ -251,6 +251,7 @@ export type WatchParty = {
   maxParticipants: number;
   createdAt: Timestamp;
   endedAt?: Timestamp;
+  voiceEnabled?: boolean; // Whether voice chat is enabled for this party
 };
 
 function generateJoinCode(): string {
@@ -349,6 +350,18 @@ export async function updateWatchPartyState(
     status,
     currentTime,
     lastSync: Timestamp.now()
+  });
+}
+
+export async function updateWatchPartyVoiceEnabled(
+  partyId: string,
+  voiceEnabled: boolean
+): Promise<void> {
+  const db = getFirestore(getFirebaseApp());
+  const partyRef = doc(db, 'watchParties', partyId);
+
+  await updateDoc(partyRef, {
+    voiceEnabled
   });
 }
 
